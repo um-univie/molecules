@@ -1,8 +1,12 @@
 use crate::molecular_formula::Isotope;
 use lazy_static::lazy_static;
 use phf::phf_map;
+
+// This speeds up by checking only within a certain range
 pub const BOND_SEARCH_THRESHOLD: f64 = 2.0;
-pub const BOND_TOLERANCE: f64 = 1.5; // This is the same cutoff as in QCxMS
+// This was chosen to be the same as the threshold used in QCxMS
+pub const BOND_TOLERANCE: f64 = 1.5;
+
 
 lazy_static! {
     pub static ref OXIDATION_STATES: [Option<Vec<i8>>;119] = [

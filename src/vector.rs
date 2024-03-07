@@ -6,7 +6,7 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub};
 /// # Example
 ///
 /// ```
-/// use fragment_extractor::vector::Vector;
+/// use molecules::vector::Vector;
 ///
 /// let v1 = Vector::new(1.0, 2.0, 3.0);
 /// let v2 = Vector::new(4.0, 5.0, 6.0);
@@ -97,7 +97,7 @@ impl Default for Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v = Vector::default();
     /// println!("Vector: {:?}", v);
@@ -118,7 +118,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let array = [1.0, 2.0, 3.0];
     /// let v = Vector::from_vec(&array);
@@ -140,7 +140,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v = Vector::new(1.0, 2.0, 3.0);
     /// println!("Vector: {:?}", v);
@@ -167,7 +167,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v1 = Vector::new(1.0, 1.0, 1.0);
     /// let v2 = Vector::new(1.0, 1.0, -1.0);
@@ -191,7 +191,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     ///     let v = Vector::new(1.0, 1.0, 1.0);
     ///     println!("Vector: {:?}", v.length());
@@ -200,6 +200,9 @@ impl Vector {
     /// ```
     pub fn length(&self) -> f64 {
         (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+    }
+    pub fn squared_length(&self) -> f64 {
+        self.x.powi(2) + self.y.powi(2) + self.z.powi(2)
     }
     /// Calculates the dot product of two vectors.
     ///
@@ -210,7 +213,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v1 = Vector::new(1.0, 2.0, 3.0);
     /// let v2 = Vector::new(4.0, 5.0, 6.0);
@@ -229,7 +232,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v1 = Vector::new(1.0, 2.0, 3.0);
     /// let v2 = Vector::new(4.0, 5.0, 6.0);
@@ -244,7 +247,7 @@ impl Vector {
     /// # Example
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     /// let v1 = Vector::new(1.0, 2.0, 3.0);
     /// let v2 = Vector::new(4.0, 5.0, 6.0);
     /// assert_eq!(v1.distance_squared(&v2),27.0);
@@ -262,7 +265,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let v = Vector::random_unit_vector();
     /// println!("Vector: {:?}", v);
@@ -289,7 +292,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let vec1 = Vector::x();
     /// let vec2 = Vector::y();
@@ -307,7 +310,7 @@ impl Vector {
     /// # Examples
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let vec_a = Vector::new(1.0, 0.0, 0.0);
     /// let vec_b = Vector::new(0.0, 1.0, 0.0);
@@ -332,7 +335,7 @@ impl Vector {
     /// # Example
     ///
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let vec1 = Vector::new(1.0,2.0,3.0);
     /// assert_eq!(vec1.normalize().length().ceil(),1.0)
@@ -351,7 +354,7 @@ impl Vector {
     ///
     /// # Example
     /// ```
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::vector::Vector;
     ///
     /// let start_point = Vector::new(1.0,0.0,0.0);
     /// let middle_point = Vector::new(0.0,0.0,0.0);

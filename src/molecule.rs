@@ -11,7 +11,7 @@ use petgraph::prelude::*;
 use rayon::prelude::*;
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     default::Default,
     fs::File,
     io::{self, BufRead},
@@ -38,11 +38,6 @@ impl Default for Atom {
             bonds: Vec::new(),
         }
     }
-}
-
-enum ParseError {
-    ParseFloatError(ParseFloatError),
-    InvalidAtom,
 }
 
 impl Atom {
@@ -76,7 +71,7 @@ impl Atom {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::Atom;
+    /// use molecules::molecule::Atom;
     /// let atom = Atom::new(6, (0.0, 0.0, 0.0));
     /// assert_eq!(atom.actual_valency(), 0);
     /// ```
@@ -96,7 +91,7 @@ impl Atom {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::Atom;
+    /// use molecules::molecule::Atom;
     /// let atom = Atom::new(6, (0.0, 0.0, 0.0));
     /// assert_eq!(atom.expected_valency(), 4);
     /// ```
@@ -184,9 +179,9 @@ impl Atom {
     ///
     /// # Example
     /// ```
-    /// use fragment_extractor::molecule::Atom;
-    /// use fragment_extractor::vector::Vector;
-    /// use fragment_extractor::consts::BOND_TOLERANCE;
+    /// use molecules::molecule::Atom;
+    /// use molecules::vector::Vector;
+    /// use molecules::consts::BOND_TOLERANCE;
     /// let mut atom1 = Atom::default();
     /// let mut atom2 = Atom::default();
     /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
@@ -208,8 +203,8 @@ impl Atom {
     ///
     /// # Example
     /// ```
-    /// use fragment_extractor::molecule::Atom;
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::molecule::Atom;
+    /// use molecules::vector::Vector;
     /// let mut atom1 = Atom::default();
     /// let mut atom2 = Atom::default();
     /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
@@ -225,8 +220,8 @@ impl Atom {
     /// # Example
     ///
     /// ```
-    /// use fragment_extractor::molecule::Atom;
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::molecule::Atom;
+    /// use molecules::vector::Vector;
     /// let mut atom1 = Atom::default();
     /// let mut atom2 = Atom::default();
     /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
@@ -578,7 +573,7 @@ impl Molecule {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     ///
     /// let molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// assert_eq!(molecule.atoms.len(), 8);
@@ -777,7 +772,7 @@ impl Molecule {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::{Molecule,Bond,Atom};
+    /// use molecules::molecule::{Molecule,Bond,Atom};
     /// let mut molecule = Molecule::default();
     /// molecule.atoms.push(Atom::new(6, (0.0, 0.0, 0.0)));
     /// molecule.atoms.push(Atom::new(6, (1.0, 0.0, 0.0)));
@@ -818,8 +813,8 @@ impl Molecule {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::{Molecule,Atom};
-    /// use fragment_extractor::vector::Vector;
+    /// use molecules::molecule::{Molecule,Atom};
+    /// use molecules::vector::Vector;
     /// let mut molecule = Molecule::default();
     /// molecule.atoms.push(Atom::new(6, (0.0, 0.0, 0.0)));
     /// molecule.atoms.push(Atom::new(6, (1.0, 0.0, 0.0)));
@@ -876,7 +871,7 @@ impl Molecule {
     /// # Example
     ///
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     ///
     /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// let dihedrals = molecule.dihedrals();
@@ -979,7 +974,7 @@ impl Molecule {
     /// # Example
     ///
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// let dihedral_angle = molecule.dihedral_angle(&(0, 1, 2, 3));
     /// assert_eq!(dihedral_angle, 0.5807210503904102);
@@ -1010,7 +1005,7 @@ impl Molecule {
     ///
     /// # Example
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// molecule.identify_bonds(2.0);
     /// let degrees = molecule.degrees();
@@ -1436,7 +1431,7 @@ impl MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::MolecularFormula;
+    /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// let mut water_methane = water.clone();
@@ -1457,7 +1452,7 @@ impl MolecularFormula {
     /// Combines two molecular formulas.
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::MolecularFormula;
+    /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// let water_methane = water.combine(&methane);
@@ -1477,7 +1472,7 @@ impl MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::MolecularFormula;
+    /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// println!("{:?}", water);
@@ -1494,7 +1489,7 @@ impl MolecularFormula {
     /// Calculates the molecular mass of the molecular formula.
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::MolecularFormula;
+    /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// assert_eq!(water.molecular_mass(), 18.015);
@@ -1549,7 +1544,7 @@ impl FromStr for MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::MolecularFormula;
+    /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
@@ -1879,7 +1874,7 @@ pub fn update_degrees(
 /// This function returns a ParseFloatError if the line has errors in the float region, it does not check for other errors.
 ///
 /// ```
-/// use fragment_extractor::molecule::extract_atom_pdb;
+/// use molecules::molecule::extract_atom_pdb;
 ///
 /// let line =  "ATOM   2073  CB  ALA B 128      11.390 -11.172  71.797  1.00 16.79           C";
 /// let atom = extract_atom_pdb(line).unwrap();
@@ -1914,7 +1909,7 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
 /// # Example
 ///
 /// ```
-/// use fragment_extractor::molecule::{Atom,extract_atom_cif};
+/// use molecules::molecule::{Atom,extract_atom_cif};
 ///
 /// let line = "ATOM   1    N N   . GLN A 1 1   ? 201.310 198.892 131.429 1.00 70.25  ? 1   GLN A N   1";
 /// let atom = extract_atom_cif(line).unwrap();
@@ -2033,7 +2028,7 @@ impl Molecule {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     ///
     /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// let atom_set = vec![0,1,2].into_iter().collect();
@@ -2080,7 +2075,7 @@ impl Molecule {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecule::Molecule;
+    /// use molecules::molecule::Molecule;
     ///
     /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
     /// let shortest_path = molecule.shortest_path(0,1).unwrap();
