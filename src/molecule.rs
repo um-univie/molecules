@@ -787,14 +787,14 @@ impl Molecule {
         &self.atoms[atom_index].bonds
     }
 
-    pub fn get_edges(&self) -> Vec<(u32, u32)> {
+    pub fn get_edges(&self) -> Vec<(usize, usize)> {
         self.atoms()
             .iter()
             .enumerate()
             .flat_map(|(atom_index, atom)| {
                 atom.bonds().iter().map(move |bond| {
                     if atom_index < bond.target() {
-                        Some((atom_index as u32, bond.target() as u32))
+                        Some((atom_index, bond.target()))
                     } else {
                         None
                     }
