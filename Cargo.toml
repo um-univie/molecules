@@ -2,6 +2,11 @@
 name = "molecules"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "A library for working with molecules and molecular dynamics simulations"
+documentation = "https://docs.rs/molecules"
+repository = "https://github.com/um-univie/molecules"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

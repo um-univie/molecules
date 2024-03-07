@@ -436,18 +436,21 @@ impl MolecularSystem {
             .iter_mut()
             .for_each(|molecule| molecule.identify_bonds(threshold))
     }
+
     pub fn number_of_atoms(&self) -> usize {
         self.molecules
             .iter()
             .map(|molecule| molecule.atoms.len())
             .sum()
     }
+
     pub fn find_angles(&self) -> Vec<Vec<BondAngle>> {
         self.molecules
             .iter()
             .map(|molecule| molecule.find_angles())
             .collect()
     }
+
     // pub fn find_dihedrals(&mut self) {
     //     self.molecules
     //         .iter_mut()
