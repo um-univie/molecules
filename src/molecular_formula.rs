@@ -31,7 +31,7 @@ impl MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// let mut water_methane = water.clone();
@@ -51,7 +51,7 @@ impl MolecularFormula {
     /// Combines two molecular formulas.
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// let water_methane = water.combine(&methane);
@@ -71,7 +71,7 @@ impl MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// println!("{:?}", water);
@@ -88,7 +88,7 @@ impl MolecularFormula {
     /// Calculates the molecular mass of the molecular formula.
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// assert_eq!(water.molecular_mass(), 18.015);
@@ -105,7 +105,7 @@ impl MolecularFormula {
     /// last peak in the isotopic pattern to be calculated.
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let isotopic_pattern_h2o = water.isotopic_pattern(3,1);
     ///
@@ -281,7 +281,7 @@ impl FromStr for MolecularFormula {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::MolecularFormula;
+    /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
@@ -363,7 +363,7 @@ impl IsotopicPattern {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::IsotopicPattern;
+    /// use molecules::molecular_formula::IsotopicPattern;
     /// let mut pattern1 = IsotopicPattern::new(vec![0.5, 0.5], vec![1.0, 2.0]);
     /// let pattern2 = IsotopicPattern::new(vec![0.5, 0.5], vec![3.0, 4.0]);
     /// let merged = pattern1.add(&pattern2);
@@ -381,7 +381,7 @@ impl IsotopicPattern {
     ///
     /// # Examples
     /// ```
-    /// use fragment_extractor::molecular_formula::IsotopicPattern; let mut pattern = IsotopicPattern::new(vec![0.5, 0.5], vec![1.0, 2.0]);
+    /// use molecules::molecular_formula::IsotopicPattern; let mut pattern = IsotopicPattern::new(vec![0.5, 0.5], vec![1.0, 2.0]);
     /// pattern.add_entry(1.0, 0.5);
     /// assert_eq!(pattern.buckets.len(), 2);
     /// ```
