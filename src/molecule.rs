@@ -167,12 +167,13 @@ impl Atom {
     }
 
     /// Determines if two atoms are bonded based on their distance to each other, their expected covalent radii and a constant tolerance factor
+    /// The reason we take the square of the threshold is to avoid the expensive square root operation
     ///
     /// # Parameters
     /// * 'self' - A reference to the current atom.
     /// * 'other' - A reference to the other atom.
-    /// * 'threshold' - The threshold for the distance between the two atoms.
-    /// * 'tolerance' - The tolerance factor for the distance between the two atoms.
+    /// * 'threshold' - The threshold for the squared distance between the two atoms.
+    /// * 'tolerance' - The tolerance factor for the square  distance between the two atoms.
     ///
     /// # Returns
     /// A boolean value indicating whether the two atoms are bonded.
@@ -188,8 +189,8 @@ impl Atom {
     /// atom2.position_vector = Vector::new(0.0,0.0,0.0);
     /// assert!(atom1.is_bonded(&atom2, 0.5, BOND_TOLERANCE));
     /// ```
-    pub fn is_bonded(&self, other: &Self, distance: f64, tolerance: f64) -> bool {
-        distance < ((self.get_atomic_radius() + other.get_atomic_radius()) * tolerance).powi(2)
+    pub fn is_bonded(&self, other: &Self, squared_threshold: f64, tolerance: f64) -> bool {
+        squared_threshold < ((self.get_atomic_radius() + other.get_atomic_radius()) * tolerance).powi(2)
     }
 
     /// Calculates the distance between two atoms.
@@ -804,6 +805,22 @@ impl Molecule {
             .collect()
     }
 
+    pub fn get_edges_with_type(&self) -> Vec<(usize, usize, BondType)> {
+        self.atoms()
+            .iter()
+            .enumerate()
+            .flat_map(|(atom_index, atom)| {
+                atom.bonds().iter().map(move |bond| {
+                    if atom_index < bond.target() {
+                        Some((atom_index, bond.target(),bond.bond_type()))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .flatten()
+            .collect()
+    }
     pub fn charge(&self) -> i32 {
         if self.atoms.len() > 1000 {
             self.atoms.par_iter().map(|atom| atom.charge() as i32).sum()
