@@ -1,6 +1,6 @@
 use crate::consts::{
-    ATOMIC_NUMBERS, ATOMIC_RADII, ATOMIC_SYMBOLS, ELECTRONEGATIVITIES, MONOISOTOPIC_MASSES, PRIMES,
-    STANDARD_ATOMIC_WEIGHTS, VALENCIES, BOND_SEARCH_THRESHOLD, BOND_TOLERANCE,
+    ATOMIC_NUMBERS, ATOMIC_RADII, ATOMIC_SYMBOLS, BOND_SEARCH_THRESHOLD, BOND_TOLERANCE,
+    ELECTRONEGATIVITIES, MONOISOTOPIC_MASSES, PRIMES, STANDARD_ATOMIC_WEIGHTS, VALENCIES,
 };
 use crate::vector::Vector;
 use core::fmt::{Display, Formatter};
@@ -24,7 +24,8 @@ pub struct Atom {
     pub atomic_number: u8,
     pub charge: i8,
     pub is_radical: bool,
-    pub position_vector: Vector,
+    pub is_aromatic: bool,
+    pub position_vector: Option<Vector>,
     bonds: Vec<Bond>,
 }
 
@@ -34,19 +35,27 @@ impl Default for Atom {
             atomic_number: 1,
             charge: 0,
             is_radical: false,
-            position_vector: Vector::default(),
+            is_aromatic: false,
+            position_vector: None,
             bonds: Vec::new(),
         }
     }
 }
 
 impl Atom {
-    pub fn new(atomic_number: u8, position: (f64, f64, f64)) -> Atom {
-        let position = Vector::new(position.0, position.1, position.2);
-        Atom {
-            atomic_number,
-            position_vector: position,
-            ..Default::default()
+    pub fn new(atomic_number: u8, position: Option<(f64, f64, f64)>) -> Atom {
+        if let Some(position) = position {
+            let position_vector = Vector::new(position.0, position.1, position.2);
+            Atom {
+                atomic_number,
+                position_vector: Some(position_vector),
+                ..Default::default()
+            }
+        } else {
+            Atom {
+                atomic_number,
+                ..Default::default()
+            }
         }
     }
 
@@ -62,7 +71,7 @@ impl Atom {
             let x = parts[1].parse::<f64>()?;
             let y = parts[2].parse::<f64>()?;
             let z = parts[3].parse::<f64>()?;
-            Ok(Atom::new(atomic_number, (x, y, z)))
+            Ok(Atom::new(atomic_number, Some((x, y, z))))
         } else {
             Err("Could not parse Line".into())
         }
@@ -72,7 +81,7 @@ impl Atom {
     /// # Examples
     /// ```
     /// use molecules::molecule::Atom;
-    /// let atom = Atom::new(6, (0.0, 0.0, 0.0));
+    /// let atom = Atom::new(6, Some((0.0, 0.0, 0.0)));
     /// assert_eq!(atom.actual_valency(), 0);
     /// ```
     pub fn actual_valency(&self) -> i8 {
@@ -92,7 +101,7 @@ impl Atom {
     /// # Examples
     /// ```
     /// use molecules::molecule::Atom;
-    /// let atom = Atom::new(6, (0.0, 0.0, 0.0));
+    /// let atom = Atom::new(6,None);
     /// assert_eq!(atom.expected_valency(), 4);
     /// ```
     pub fn expected_valency(&self) -> i8 {
@@ -113,10 +122,22 @@ impl Atom {
         &self.bonds
     }
 
+    pub fn add_bond(&mut self, bond: Bond) {
+        self.bonds.push(bond);
+    }
+
     pub fn charge(&self) -> i8 {
         self.charge
     }
 
+    pub fn is_aromatic(&self) -> bool {
+        self.is_aromatic
+    }
+
+    pub fn aromatic(mut self) -> Self {
+        self.is_aromatic = true;
+        self
+    }
     pub fn set_charge(&mut self, charge: i8) {
         self.charge = charge;
     }
@@ -183,14 +204,13 @@ impl Atom {
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
     /// use molecules::consts::BOND_TOLERANCE;
-    /// let mut atom1 = Atom::default();
-    /// let mut atom2 = Atom::default();
-    /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
-    /// atom2.position_vector = Vector::new(0.0,0.0,0.0);
+    /// let mut atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
+    /// let mut atom2 = Atom::new(6, Some((1.0,0.0,0.0)));  
     /// assert!(atom1.is_bonded(&atom2, 0.5, BOND_TOLERANCE));
     /// ```
     pub fn is_bonded(&self, other: &Self, squared_threshold: f64, tolerance: f64) -> bool {
-        squared_threshold < ((self.get_atomic_radius() + other.get_atomic_radius()) * tolerance).powi(2)
+        squared_threshold
+            < ((self.get_atomic_radius() + other.get_atomic_radius()) * tolerance).powi(2)
     }
 
     /// Calculates the distance between two atoms.
@@ -206,14 +226,18 @@ impl Atom {
     /// ```
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
-    /// let mut atom1 = Atom::default();
-    /// let mut atom2 = Atom::default();
-    /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
-    /// atom2.position_vector = Vector::new(0.0,0.0,0.0);
+    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
+    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
     /// assert_eq!(atom1.distance(&atom2),1.0);
     /// ```
     pub fn distance(&self, other: &Atom) -> f64 {
-        self.position_vector.distance(&other.position_vector)
+        let Some(self_position_vector) = self.position_vector else {
+            return 0.0;
+        };
+        let Some(other_position_vector) = other.position_vector else {
+            return 0.0;
+        };
+        self_position_vector.distance(&other_position_vector)
     }
 
     /// Calculates the squared distance between two atoms saving computation time.
@@ -223,16 +247,19 @@ impl Atom {
     /// ```
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
-    /// let mut atom1 = Atom::default();
-    /// let mut atom2 = Atom::default();
-    /// atom1.position_vector = Vector::new(1.0,0.0,0.0);
-    /// atom2.position_vector = Vector::new(0.0,0.0,0.0);
+    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
+    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
     /// assert_eq!(atom1.distance_squared(&atom2),1.0);
     /// ```
     ///
     pub fn distance_squared(&self, other: &Atom) -> f64 {
-        self.position_vector
-            .distance_squared(&other.position_vector)
+        let Some(self_position_vector) = self.position_vector else {
+            return 0.0;
+        };
+        let Some(other_position_vector) = other.position_vector else {
+            return 0.0;
+        };
+        self_position_vector.distance_squared(&other_position_vector)
     }
 
     /// Calculates the potential energy of a diatomic system using the harmonic oscillator model.
@@ -244,6 +271,15 @@ impl Atom {
     ///
     /// # Returns
     /// The potential energy of the diatomic system as a 64-bit floating-point number.
+    ///
+    /// # Example
+    /// ```
+    /// use molecules::molecule::Atom;
+    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
+    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
+    ///
+    /// assert_eq!(atom1.potential_energy(&atom2, 1.0, 1.0),0.0);
+    /// ```
     pub fn potential_energy(
         &self,
         other: &Atom,
@@ -287,7 +323,7 @@ pub struct Bond {
 }
 
 impl Bond {
-    fn new(target: usize, bond_type: BondType) -> Bond {
+    pub fn new(target: usize, bond_type: BondType) -> Bond {
         Bond { target, bond_type }
     }
     fn single(target: usize) -> Bond {
@@ -382,8 +418,6 @@ impl MolecularSystem {
                 atom_groups.push(Vec::new());
             } else if line.starts_with("ENDMDL") {
                 break;
-            } else {
-                continue;
             }
         }
         let path = path.as_ref().to_str().unwrap();
@@ -425,7 +459,10 @@ impl MolecularSystem {
         let mut count = 0.0;
         for molecule in &self.molecules {
             for atom in &molecule.atoms {
-                sum += atom.position_vector
+                let Some(position_vector) = atom.position_vector else {
+                    continue;
+                };
+                sum += position_vector;
             }
             count += molecule.atoms.len() as f64
         }
@@ -465,66 +502,17 @@ impl MolecularSystem {
 }
 
 fn push_atom(atomic_number: u8, position: (f64, f64, f64), atoms: &mut Vec<Atom>) {
-    atoms.push(Atom::new(atomic_number, position));
+    atoms.push(Atom::new(atomic_number, Some(position)));
 }
 
 impl Molecule {
-
     pub fn from_atoms(atoms: Vec<Atom>) -> Self {
         Molecule {
             atoms,
             ..Default::default()
         }
     }
-    
-    pub fn from_smiles(smiles: &str) -> Self {
-        let mut atoms: Vec<Atom> = Vec::new();
-        let mut ring_number: Option<usize> = None;
-        let mut current_atom: Option<Atom> = None;
-        let mut current_atom_index: usize = 0;
-        let mut is_negative = false;
-        let mut element_buffer = String::new();
-        
-        for (index, c) in smiles.chars().enumerate() {
-            match c {
-               'A'..='Z' => {
-                    if let Some(atom) = current_atom {
-                        atoms.push(atom);
-                        current_atom = None;
-                    }
-                    element_buffer.push(c);
-                    current_atom_index = index;
-                }, 
 
-                'a'..='z' => {
-                    element_buffer.push(c);
-                },
-
-                '-' => {
-                    is_negative = true;
-                    if let Some(atom) = current_atom {
-                        atoms.push(atom);
-                        current_atom = None;
-                    }}
-                    ,
-                '1'..='9' => {
-                    if is_negative {
-                        atoms[current_atom_index].charge = -(c.to_digit(10).unwrap() as i8);
-                    } else {
-                        atoms[current_atom_index].charge = c.to_digit(10).unwrap() as i8;
-                    }
-                },
-                _ => (),
-            }
-        }
-
-        
-        
-        Molecule::from_atoms(atoms)
-
-
-    }
-    
     pub fn atoms(&self) -> &Vec<Atom> {
         &self.atoms
     }
@@ -603,7 +591,10 @@ impl Molecule {
     pub fn build_tree(&self) -> KdTree<f64, 3> {
         let mut tree: KdTree<f64, 3> = KdTree::with_capacity(self.atoms.len());
         for (index, atom) in self.atoms.iter().enumerate() {
-            tree.add(&atom.position_vector.as_array(), index as u64);
+            let Some(position_vector) = atom.position_vector else {
+                continue;
+            };
+            tree.add(&position_vector.as_array(), index as u64);
         }
         tree
     }
@@ -727,13 +718,13 @@ impl Molecule {
             .par_iter()
             .enumerate()
             .map(|(index, atom)| {
+                // If any atom does not have a position vector, return an empty vector
+                let Some(position_vector) = atom.position_vector else {
+                    return Vec::new();
+                };
                 let mut bonds = kdtree
                     .within::<SquaredEuclidean>(
-                        &[
-                            atom.position_vector.x,
-                            atom.position_vector.y,
-                            atom.position_vector.z,
-                        ],
+                        &[position_vector.x, position_vector.y, position_vector.z],
                         threshold_squared,
                     )
                     .iter()
@@ -778,9 +769,9 @@ impl Molecule {
     /// ```
     /// use molecules::molecule::{Molecule,Bond,Atom};
     /// let mut molecule = Molecule::default();
-    /// molecule.atoms.push(Atom::new(6, (0.0, 0.0, 0.0)));
-    /// molecule.atoms.push(Atom::new(6, (1.0, 0.0, 0.0)));
-    /// molecule.atoms.push(Atom::new(6, (2.0, 0.0, 0.0)));
+    /// molecule.atoms.push(Atom::new(6, Some((0.0, 0.0, 0.0))));
+    /// molecule.atoms.push(Atom::new(6, Some((1.0, 0.0, 0.0))));
+    /// molecule.atoms.push(Atom::new(6, Some((2.0, 0.0, 0.0))));
     /// molecule.identify_bonds(1.5);
     /// assert_eq!(molecule.get_bonds(1).len(), 2);
     /// ```
@@ -812,7 +803,7 @@ impl Molecule {
             .flat_map(|(atom_index, atom)| {
                 atom.bonds().iter().map(move |bond| {
                     if atom_index < bond.target() {
-                        Some((atom_index, bond.target(),bond.bond_type()))
+                        Some((atom_index, bond.target(), bond.bond_type()))
                     } else {
                         None
                     }
@@ -836,16 +827,19 @@ impl Molecule {
     /// use molecules::molecule::{Molecule,Atom};
     /// use molecules::vector::Vector;
     /// let mut molecule = Molecule::default();
-    /// molecule.atoms.push(Atom::new(6, (0.0, 0.0, 0.0)));
-    /// molecule.atoms.push(Atom::new(6, (1.0, 0.0, 0.0)));
-    /// molecule.atoms.push(Atom::new(6, (2.0, 0.0, 0.0)));
+    /// molecule.atoms.push(Atom::new(6, Some((0.0, 0.0, 0.0))));
+    /// molecule.atoms.push(Atom::new(6, Some((1.0, 0.0, 0.0))));
+    /// molecule.atoms.push(Atom::new(6, Some((2.0, 0.0, 0.0))));
     /// assert_eq!(molecule.center(), Vector::new(1.0, 0.0, 0.0));
     /// ```
     pub fn center(&self) -> Vector {
         let mut sum = Vector::new(0.0, 0.0, 0.0);
 
         for atom in &self.atoms {
-            sum += atom.position_vector
+            let Some(position_vector) = atom.position_vector else {
+                continue;
+            };
+            sum += position_vector;
         }
 
         let count = self.atoms.len() as f64;
@@ -866,12 +860,19 @@ impl Molecule {
                 atom.bonds.iter().combinations(2).for_each(|slice| {
                     let neighbor1_index = slice[0].target;
                     let neighbor2_index = slice[1].target;
-                    let angle = self.atoms[neighbor1_index]
-                        .position_vector
-                        .angle_between_points(
-                            &self.atoms[atom_index].position_vector,
-                            &self.atoms[neighbor2_index].position_vector,
-                        );
+                    let Some(ref position_vector1) = self.atoms[neighbor1_index].position_vector
+                    else {
+                        return;
+                    };
+                    let Some(ref position_vector2) = atom.position_vector else {
+                        return;
+                    };
+                    let Some(ref position_vector3) = self.atoms[neighbor2_index].position_vector
+                    else {
+                        return;
+                    };
+                    let angle =
+                        position_vector1.angle_between_points(position_vector2, position_vector3);
                     local_bond_angles.push(BondAngle::new(
                         angle,
                         (neighbor1_index, atom_index, neighbor2_index),
@@ -1006,6 +1007,10 @@ impl Molecule {
             self.atoms[dihedral.2].position_vector,
             self.atoms[dihedral.3].position_vector,
         );
+        let Some(a) = a else { return 0.0 };
+        let Some(b) = b else { return 0.0 };
+        let Some(c) = c else { return 0.0 };
+        let Some(d) = d else { return 0.0 };
         let v3 = d - c;
         let v2 = c - b;
         let v1 = b - a;
@@ -1898,9 +1903,10 @@ pub fn update_degrees(
 ///
 /// let line =  "ATOM   2073  CB  ALA B 128      11.390 -11.172  71.797  1.00 16.79           C";
 /// let atom = extract_atom_pdb(line).unwrap();
-/// assert_eq!(atom.position_vector.x, 11.390, "Incorrect x coordinate");
-/// assert_eq!(atom.position_vector.y, -11.172, "Incorrect y coordinate");
-/// assert_eq!(atom.position_vector.z, 71.797, "Incorrect z coordinate");
+/// let position = atom.position_vector.unwrap();
+/// assert_eq!(position.x, 11.390, "Incorrect x coordinate");
+/// assert_eq!(position.y, -11.172, "Incorrect y coordinate");
+/// assert_eq!(position.z, 71.797, "Incorrect z coordinate");
 /// assert_eq!(atom.name(), "C", "Incorrect atom name");
 /// assert_eq!(atom.atomic_number(), 6, "Incorrect atom type");
 /// ```
@@ -1915,7 +1921,7 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
     let name = line[76..=77].trim().to_string();
     let atomic_number = *ATOMIC_NUMBERS.get(&name).unwrap_or(&0);
     Ok(Atom {
-        position_vector: position,
+        position_vector: Some(position),
         atomic_number,
         ..Default::default()
     })
@@ -1933,9 +1939,10 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
 ///
 /// let line = "ATOM   1    N N   . GLN A 1 1   ? 201.310 198.892 131.429 1.00 70.25  ? 1   GLN A N   1";
 /// let atom = extract_atom_cif(line).unwrap();
-/// assert_eq!(atom.position_vector.x, 201.310, "Incorrect x coordinate");
-/// assert_eq!(atom.position_vector.y, 198.892, "Incorrect y coordinate");
-/// assert_eq!(atom.position_vector.z, 131.429, "Incorrect z coordinate");
+/// let position = atom.position_vector.unwrap();
+/// assert_eq!(position.x, 201.310, "Incorrect x coordinate");
+/// assert_eq!(position.y, 198.892, "Incorrect y coordinate");
+/// assert_eq!(position.z, 131.429, "Incorrect z coordinate");
 /// assert_eq!(atom.name(), "N", "Incorrect atom name");
 /// assert_eq!(atom.atomic_number(), 7, "Incorrect atom type");
 /// ```
@@ -1949,7 +1956,7 @@ pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
         z: fields[12].parse::<f64>()?,
     };
     Ok(Atom {
-        position_vector: position,
+        position_vector: Some(position),
         atomic_number,
         ..Default::default()
     })
@@ -1963,10 +1970,11 @@ mod tests {
         let line =
             "ATOM      1  N   ALA A   1      10.000  10.000  10.000  1.00  0.00           N  ";
         let atom = super::extract_atom_pdb(line).unwrap();
+        let position = atom.position_vector.unwrap();
         assert_eq!(atom.atomic_number, 7);
-        assert_eq!(atom.position_vector.x, 10.0);
-        assert_eq!(atom.position_vector.y, 10.0);
-        assert_eq!(atom.position_vector.z, 10.0);
+        assert_eq!(position.x, 10.0);
+        assert_eq!(position.y, 10.0);
+        assert_eq!(position.z, 10.0);
     }
     #[test]
     fn test_vector_angle() {
@@ -2003,32 +2011,9 @@ mod tests {
     #[test]
     fn test_bond_angle() {
         use super::*;
-        let atom1 = Atom {
-            position_vector: Vector {
-                x: 1.0,
-                y: 0.0,
-                z: 0.0,
-            },
-
-            ..Default::default()
-        };
-        let atom2 = Atom {
-            position_vector: Vector {
-                x: 0.0,
-                y: 1.0,
-                z: 0.0,
-            },
-            ..Default::default()
-        };
-        let atom3 = Atom {
-            position_vector: Vector {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            atomic_number: 6,
-            ..Default::default()
-        };
+        let atom1 = Atom::new(6, Some((1.0, 0.0, 0.0)));
+        let atom2 = Atom::new(6, Some((0.0, 1.0, 0.0)));
+        let atom3 = Atom::new(6, Some((0.0, 0.0, 1.0)));
         let mut molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
         molecule.identify_bonds(2.0);
         let angles = molecule.find_angles();
@@ -2240,7 +2225,6 @@ impl Molecule {
         self.atoms().iter().map(|atom| atom.name()).collect()
     }
 
-    
     pub fn morgans_algorithm(&self, max_depth: Option<usize>) -> Vec<usize> {
         let mut vertex_degrees = self
             .atoms()
