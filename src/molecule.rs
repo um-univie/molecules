@@ -19,10 +19,23 @@ use std::{
     path::Path,
 };
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ChiralClass {
+    S,
+    R,
+    AL(u8),
+    SP(u8),
+    TB(u8),
+    OH(u8),
+    None
+}
+
 #[derive(Debug, Clone)]
 pub struct Atom {
     pub atomic_number: u8,
     pub charge: i8,
+    pub chiral_class: ChiralClass,
+    pub isotope: Option<u16>,
     pub is_radical: bool,
     pub is_aromatic: bool,
     pub position_vector: Option<Vector>,
@@ -34,6 +47,8 @@ impl Default for Atom {
         Atom {
             atomic_number: 1,
             charge: 0,
+            chiral_class: ChiralClass::None,
+            isotope: None,
             is_radical: false,
             is_aromatic: false,
             position_vector: None,
@@ -43,25 +58,37 @@ impl Default for Atom {
 }
 
 impl Atom {
-    pub fn new(atomic_number: u8, position: Option<(f64, f64, f64)>) -> Atom {
-        if let Some(position) = position {
-            let position_vector = Vector::new(position.0, position.1, position.2);
-            Atom {
-                atomic_number,
-                position_vector: Some(position_vector),
-                ..Default::default()
-            }
-        } else {
+    pub fn new(atomic_number: u8) -> Atom {
             Atom {
                 atomic_number,
                 ..Default::default()
             }
-        }
+    }
+    
+    pub fn with_chiral_class(mut self, chiral_class: ChiralClass) -> Self {
+        self.chiral_class = chiral_class;
+        self
+    }
+
+    pub fn with_position(mut self, position: (f64, f64, f64)) -> Self {
+        self.position_vector = Some(Vector::new(position.0, position.1, position.2));
+        self
+    }
+   
+    pub fn with_charge(mut self, charge: i8) -> Self {
+        self.charge = charge;
+        self
+    }
+
+    pub fn with_isotope(mut self, isotope: u16) -> Self {
+        self.isotope = Some(isotope);
+        self
     }
 
     pub fn degree(&self) -> i8 {
         self.actual_valency() - self.expected_valency() + self.charge().abs()
-        //+ if self.is_radical() { 1 } else { 0 }
+        + if self.is_radical() { 1 } else { 0 }
+        + if self.is_aromatic() { 1 } else { 0 }
     }
 
     pub fn from_xyz_line(line: &str) -> Result<Atom, Box<dyn std::error::Error>> {
@@ -71,7 +98,7 @@ impl Atom {
             let x = parts[1].parse::<f64>()?;
             let y = parts[2].parse::<f64>()?;
             let z = parts[3].parse::<f64>()?;
-            Ok(Atom::new(atomic_number, Some((x, y, z))))
+            Ok(Atom::new(atomic_number).with_position((x, y, z)))
         } else {
             Err("Could not parse Line".into())
         }
@@ -81,27 +108,29 @@ impl Atom {
     /// # Examples
     /// ```
     /// use molecules::molecule::Atom;
-    /// let atom = Atom::new(6, Some((0.0, 0.0, 0.0)));
+    /// let atom = Atom::new(6);
     /// assert_eq!(atom.actual_valency(), 0);
     /// ```
     pub fn actual_valency(&self) -> i8 {
         self.bonds
             .iter()
             .map(|bond| match bond.bond_type() {
-                BondType::Single => 1,
-                BondType::Double => 2,
-                BondType::Triple => 3,
-                BondType::Aromatic => 1,
+                BondType::Single => 2,
+                BondType::Double => 4,
+                BondType::Triple => 6,
+                BondType::Quadruple => 8,
+                BondType::Aromatic => 3,
             })
-            .sum::<i8>()
+            .sum::<i8>() / 2
             + if self.is_radical { 1 } else { 0 }
+            //+ if self.is_aromatic { 1 } else { 0 }
     }
     /// Returns the expected valency of the atom based on its atomic number
     ///
     /// # Examples
     /// ```
     /// use molecules::molecule::Atom;
-    /// let atom = Atom::new(6,None);
+    /// let atom = Atom::new(6);
     /// assert_eq!(atom.expected_valency(), 4);
     /// ```
     pub fn expected_valency(&self) -> i8 {
@@ -204,8 +233,8 @@ impl Atom {
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
     /// use molecules::consts::BOND_TOLERANCE;
-    /// let mut atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
-    /// let mut atom2 = Atom::new(6, Some((1.0,0.0,0.0)));  
+    /// let mut atom1 = Atom::new(6).with_position((0.0,0.0,0.0));
+    /// let mut atom2 = Atom::new(6).with_position((1.0,0.0,0.0));  
     /// assert!(atom1.is_bonded(&atom2, 0.5, BOND_TOLERANCE));
     /// ```
     pub fn is_bonded(&self, other: &Self, squared_threshold: f64, tolerance: f64) -> bool {
@@ -226,8 +255,8 @@ impl Atom {
     /// ```
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
-    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
-    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
+    /// let atom1 = Atom::new(6).with_position((0.0,0.0,0.0));
+    /// let atom2 = Atom::new(6).with_position((1.0,0.0,0.0));
     /// assert_eq!(atom1.distance(&atom2),1.0);
     /// ```
     pub fn distance(&self, other: &Atom) -> f64 {
@@ -247,8 +276,8 @@ impl Atom {
     /// ```
     /// use molecules::molecule::Atom;
     /// use molecules::vector::Vector;
-    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
-    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
+    /// let atom1 = Atom::new(6).with_position((0.0,0.0,0.0));
+    /// let atom2 = Atom::new(6).with_position((1.0,0.0,0.0));
     /// assert_eq!(atom1.distance_squared(&atom2),1.0);
     /// ```
     ///
@@ -275,9 +304,8 @@ impl Atom {
     /// # Example
     /// ```
     /// use molecules::molecule::Atom;
-    /// let atom1 = Atom::new(6, Some((0.0,0.0,0.0)));
-    /// let atom2 = Atom::new(6, Some((1.0,0.0,0.0)));
-    ///
+    /// let atom1 = Atom::new(6).with_position((0.0,0.0,0.0));
+    /// let atom2 = Atom::new(6).with_position((1.0,0.0,0.0));
     /// assert_eq!(atom1.potential_energy(&atom2, 1.0, 1.0),0.0);
     /// ```
     pub fn potential_energy(
@@ -361,6 +389,7 @@ impl Bond {
             BondType::Single => 1,
             BondType::Double => 2,
             BondType::Triple => 3,
+            BondType::Quadruple => 4,
             // TODO: Implement aromatic bond order
             BondType::Aromatic => 1,
         }
@@ -373,6 +402,7 @@ pub enum BondType {
     Double,
     Triple,
     Aromatic,
+    Quadruple,
 }
 
 impl Display for BondType {
@@ -381,6 +411,7 @@ impl Display for BondType {
             BondType::Single => write!(f, "-"),
             BondType::Double => write!(f, "="),
             BondType::Triple => write!(f, "#"),
+            BondType::Quadruple => write!(f, "$"),
             BondType::Aromatic => write!(f, ":"),
         }
     }
@@ -502,7 +533,7 @@ impl MolecularSystem {
 }
 
 fn push_atom(atomic_number: u8, position: (f64, f64, f64), atoms: &mut Vec<Atom>) {
-    atoms.push(Atom::new(atomic_number, Some(position)));
+    atoms.push(Atom::new(atomic_number).with_position(position));
 }
 
 impl Molecule {
@@ -768,10 +799,10 @@ impl Molecule {
     /// # Examples
     /// ```
     /// use molecules::molecule::{Molecule,Bond,Atom};
-    /// let mut molecule = Molecule::default();
-    /// molecule.atoms.push(Atom::new(6, Some((0.0, 0.0, 0.0))));
-    /// molecule.atoms.push(Atom::new(6, Some((1.0, 0.0, 0.0))));
-    /// molecule.atoms.push(Atom::new(6, Some((2.0, 0.0, 0.0))));
+    /// let atom1 = Atom::new(6).with_position((0.0, 0.0, 0.0));
+    /// let atom2 = Atom::new(6).with_position((1.0, 0.0, 0.0));
+    /// let atom3 = Atom::new(6).with_position((2.0, 0.0, 0.0));
+    /// let mut molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
     /// molecule.identify_bonds(1.5);
     /// assert_eq!(molecule.get_bonds(1).len(), 2);
     /// ```
@@ -826,10 +857,10 @@ impl Molecule {
     /// ```
     /// use molecules::molecule::{Molecule,Atom};
     /// use molecules::vector::Vector;
-    /// let mut molecule = Molecule::default();
-    /// molecule.atoms.push(Atom::new(6, Some((0.0, 0.0, 0.0))));
-    /// molecule.atoms.push(Atom::new(6, Some((1.0, 0.0, 0.0))));
-    /// molecule.atoms.push(Atom::new(6, Some((2.0, 0.0, 0.0))));
+    /// let atom1 = Atom::new(6).with_position((0.0, 0.0, 0.0));
+    /// let atom2 = Atom::new(6).with_position((1.0, 0.0, 0.0));
+    /// let atom3 = Atom::new(6).with_position((2.0, 0.0, 0.0));
+    /// let molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
     /// assert_eq!(molecule.center(), Vector::new(1.0, 0.0, 0.0));
     /// ```
     pub fn center(&self) -> Vector {
@@ -923,70 +954,6 @@ impl Molecule {
             .collect();
         dihedrals
     }
-
-    // pub fn find_dihedrals(&mut self) {
-    //     if self.bond_angles.is_empty() {
-    //         self.find_angles()
-    //     }
-    //     let dihedrals = self
-    //         .bond_angles
-    //         .iter()
-    //         .flat_map(|angle| {
-    //             let ((atom1, atom2, atom3), _) = *angle;
-    //             self.get_bonds(atom3)
-    //                 .iter()
-    //                 .filter_map(|&bond| {
-    //                     // This logic needs to be updated
-    //                     if bond.target != atom2 && atom1 < bond.target {
-    //                         let dihedral = (atom1, atom2, atom3, bond.target);
-    //                         Some((dihedral, self.dihedral_angle(&(dihedral))))
-    //                     } else {
-    //                         None
-    //                     }
-    //                 })
-    //                 .collect::<Vec<_>>()
-    //         })
-    //         .collect();
-    //     self.dihedral_angles = dihedrals;
-    // }
-
-    // pub fn par_find_dihedrals(&mut self) {
-    //     if self.bond_angles.is_empty() {
-    //         self.find_angles()
-    //     }
-    //     if !self.bonds_calculated {
-    //         self.identify_bonds(BOND_SEARCH_THRESHOLD)
-    //     }
-
-    //     let dihedrals = self
-    //         .bond_angles
-    //         .par_iter()
-    //         .flat_map(|angle| {
-    //             self.bonds
-    //                 .iter()
-    //                 .filter_map(|&(bond0, bond1)| {
-    //                     let ((atom1, atom2, atom3), _) = *angle;
-    //                     if bond0 == atom2 || bond1 == atom2 {
-    //                         return None;
-    //                     }
-    //                     let dihedral = match (atom1, atom2) {
-    //                         _ if atom1 == bond0 => (bond1, atom1, atom2, atom3),
-    //                         _ if atom1 == bond1 => (bond0, atom1, atom2, atom3),
-    //                         _ if atom3 == bond0 => (atom1, atom2, atom3, bond1),
-    //                         _ if atom3 == bond1 => (atom1, atom2, atom3, bond0),
-    //                         _ => return None,
-    //                     };
-    //                     if dihedral.0 < dihedral.3 {
-    //                         Some((dihedral, self.dihedral_angle(&dihedral)))
-    //                     } else {
-    //                         None
-    //                     }
-    //                 })
-    //                 .collect::<Vec<((usize, usize, usize, usize), f64)>>()
-    //         })
-    //         .collect::<Vec<((usize, usize, usize, usize), f64)>>();
-    //     self.dihedral_angles = dihedrals;
-    // }
     /// This function calculates the dihedral angle for all atoms
     ///
     /// # Panics
@@ -1378,6 +1345,7 @@ impl Molecule {
             BondType::Single => {}
             BondType::Double => smiles.push('='),
             BondType::Triple => smiles.push('#'),
+            BondType::Quadruple => smiles.push('$'),
             BondType::Aromatic => smiles.push('~'),
         }
         let charge = self.atoms[node.index].charge;
@@ -1855,7 +1823,9 @@ pub fn increase_bond(bond: &mut Bond) {
     match bond.bond_type {
         BondType::Single => bond.bond_type = BondType::Double,
         BondType::Double => bond.bond_type = BondType::Triple,
-        BondType::Triple => panic!("Cannot increase bond beyond triple bond"),
+        // TODO handle this in the case of metals
+        BondType::Triple => bond.bond_type = BondType::Quadruple,
+        BondType::Quadruple => panic!("Cannot increase bond beyond quadruple bond"),
         BondType::Aromatic => panic!("Cannot increase bond beyond aromatic bond"),
     }
 }
@@ -1878,6 +1848,7 @@ pub fn decrease_bond(bond: &mut Bond) {
         BondType::Single => panic!("Cannot decrease bond beyond single bond"),
         BondType::Double => bond.bond_type = BondType::Single,
         BondType::Triple => bond.bond_type = BondType::Double,
+        BondType::Quadruple => bond.bond_type = BondType::Triple,
         BondType::Aromatic => bond.bond_type = BondType::Single,
     }
 }
@@ -2011,12 +1982,13 @@ mod tests {
     #[test]
     fn test_bond_angle() {
         use super::*;
-        let atom1 = Atom::new(6, Some((1.0, 0.0, 0.0)));
-        let atom2 = Atom::new(6, Some((0.0, 1.0, 0.0)));
-        let atom3 = Atom::new(6, Some((0.0, 0.0, 1.0)));
+        let atom1 = Atom::new(6).with_position((1.5, 0.0, 0.0));
+        let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
+        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.5));
         let mut molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
         molecule.identify_bonds(2.0);
         let angles = molecule.find_angles();
+        println!("{:?}", angles);
         assert_eq!(angles.len(), 1);
         assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
     }
