@@ -27,7 +27,7 @@ pub enum ChiralClass {
     SP(u8),
     TB(u8),
     OH(u8),
-    None
+    None,
 }
 
 #[derive(Debug, Clone)]
@@ -59,12 +59,12 @@ impl Default for Atom {
 
 impl Atom {
     pub fn new(atomic_number: u8) -> Atom {
-            Atom {
-                atomic_number,
-                ..Default::default()
-            }
+        Atom {
+            atomic_number,
+            ..Default::default()
+        }
     }
-    
+
     pub fn with_chiral_class(mut self, chiral_class: ChiralClass) -> Self {
         self.chiral_class = chiral_class;
         self
@@ -74,7 +74,7 @@ impl Atom {
         self.position_vector = Some(Vector::new(position.0, position.1, position.2));
         self
     }
-   
+
     pub fn with_charge(mut self, charge: i8) -> Self {
         self.charge = charge;
         self
@@ -86,9 +86,10 @@ impl Atom {
     }
 
     pub fn degree(&self) -> i8 {
-        self.actual_valency() - self.expected_valency() + self.charge().abs()
-        + if self.is_radical() { 1 } else { 0 }
-        + if self.is_aromatic() { 1 } else { 0 }
+        self.actual_valency() - self.expected_valency()
+            + self.charge().abs()
+            + if self.is_radical() { 1 } else { 0 }
+            + if self.is_aromatic() { 1 } else { 0 }
     }
 
     pub fn from_xyz_line(line: &str) -> Result<Atom, Box<dyn std::error::Error>> {
@@ -121,9 +122,10 @@ impl Atom {
                 BondType::Quadruple => 8,
                 BondType::Aromatic => 3,
             })
-            .sum::<i8>() / 2
+            .sum::<i8>()
+            / 2
             + if self.is_radical { 1 } else { 0 }
-            //+ if self.is_aromatic { 1 } else { 0 }
+        //+ if self.is_aromatic { 1 } else { 0 }
     }
     /// Returns the expected valency of the atom based on its atomic number
     ///

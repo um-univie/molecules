@@ -1,10 +1,11 @@
-use crate::consts::{ATOMIC_NUMBERS,ISOTOPES};
-use crate::molecule::{Atom, Bond, BondType, Molecule, ChiralClass};
+use crate::consts::{ATOMIC_NUMBERS, ISOTOPES};
+use crate::molecule::{Atom, Bond, BondType, ChiralClass, Molecule};
 
 use nohash_hasher::IntMap;
 
 #[derive(Debug)]
-pub enum ParseError { ElementNotFound,
+pub enum ParseError {
+    ElementNotFound(String),
     BondNotFound,
     RingIndexError,
     SMILESComplexError,
@@ -13,7 +14,7 @@ pub enum ParseError { ElementNotFound,
     EOL,
 }
 
-struct SMILESParser {
+pub struct SMILESParser {
     atoms: Vec<Atom>,
     bonds: Vec<(usize, usize, BondType)>,
     current_atom_index: usize,
@@ -29,26 +30,27 @@ struct SMILESParser {
     is_explicit_hydrogen: bool,
 }
 
-
-impl SMILESParser {
-    pub fn new() -> SMILESParser {
+impl Default for SMILESParser {
+    fn default() -> Self {
         SMILESParser {
             atoms: Vec::new(),
             bonds: Vec::new(),
+            current_atom_index: 0,
+            element_buffer: String::new(),
+            last_bond_type: BondType::Single,
+            chiral_class: ChiralClass::None,
             ring_number: None,
             ring_bonds: IntMap::default(),
-            element_buffer: String::new(),
-            chiral_class: ChiralClass::None,
             branch_stack: Vec::new(),
-            isotope: None,
-            last_bond_type: BondType::Single,
             branch_exits: 0,
+            isotope: None,
             is_double_digit: false,
             is_explicit_hydrogen: false,
-            current_atom_index: 0,
         }
     }
+}
 
+impl SMILESParser {
     fn handle_bond(&mut self) {
         if self.branch_exits > 0 && !self.branch_stack.is_empty() {
             let mut branch_atom = self.branch_stack.pop().unwrap();
@@ -71,23 +73,23 @@ impl SMILESParser {
     }
     fn handle_atom(&mut self, byte: Option<u8>) -> Result<(), ParseError> {
         if !self.element_buffer.is_empty() {
-            // The map is case sensitive, so we need to convert to uppercase
             let atomic_number = ATOMIC_NUMBERS
                 .get(&self.element_buffer.to_uppercase())
-                .ok_or(ParseError::ElementNotFound)?;
+                .ok_or(ParseError::ElementNotFound(self.element_buffer.to_owned()))?;
             // TODO: Handle the case where we have only one hydrogen
             if *atomic_number == 1 {
                 self.is_explicit_hydrogen = true;
                 return Ok(());
             }
 
+            let mut atom = Atom::new(*atomic_number);
+
             self.current_atom_index += 1;
 
             if self.current_atom_index > 0 && byte.is_some() {
                 self.handle_bond();
             }
-            
-            let mut atom = Atom::new(*atomic_number);
+
 
             if self.element_buffer.chars().next().unwrap().is_lowercase() {
                 atom = Atom::new(*atomic_number).aromatic();
@@ -98,8 +100,11 @@ impl SMILESParser {
                     atom = atom.with_isotope(isotope);
                     self.isotope = None;
                 } else {
-                    println!("Isotope {} is not valid for atomic number {}, skipping it", isotope, *atomic_number);
-                } 
+                    println!(
+                        "Isotope {} is not valid for atomic number {}, skipping it",
+                        isotope, *atomic_number
+                    );
+                }
             }
 
             if self.chiral_class != ChiralClass::None {
@@ -121,8 +126,7 @@ impl SMILESParser {
         if self.is_double_digit {
             if let Some(ring_number_value) = self.ring_number {
                 // TODO make this generic for any size
-                self.ring_number =
-                    Some(ring_number_value * 10 + byte_to_number(byte) as usize);
+                self.ring_number = Some(ring_number_value * 10 + byte_to_number(byte) as usize);
                 self.is_double_digit = false;
             } else {
                 self.ring_number = Some(byte_to_number(byte) as usize);
@@ -145,9 +149,12 @@ impl SMILESParser {
         Ok(())
     }
 
-    pub fn handle_complex_atom(&mut self, bytes: &[u8], position: &mut usize) -> Result<(), ParseError> {
-        let mut atomic_number = None;
-        let mut chiral_class_buffer = String::new();
+    pub fn handle_complex_atom(
+        &mut self,
+        bytes: &[u8],
+        position: &mut usize,
+    ) -> Result<(), ParseError> {
+        self.handle_atom(None)?;
 
         if bytes[*position].is_ascii_digit() {
             let mut temp_number: u16 = 0;
@@ -159,72 +166,71 @@ impl SMILESParser {
             self.isotope = Some(temp_number);
         }
         
+
         if bytes[*position].is_ascii_uppercase() {
-            let mut temp_string = String::new();
+            self.element_buffer.push(bytes[*position] as char);
             while bytes[*position].is_ascii_lowercase() {
-                temp_string.push(bytes[*position] as char);
+                self.element_buffer.push(bytes[*position] as char);
                 *position += 1;
             }
-            let temp_atomic_number = ATOMIC_NUMBERS.get(&temp_string).ok_or(ParseError::ElementNotFound)?;
-            atomic_number = Some(*temp_atomic_number);
         }
 
+        *position += 1;
         let start_position = *position;
+
         if bytes[*position] == b'@' {
             let mut temp_counter = 0;
             *position += 1;
             while bytes[*position].is_ascii_uppercase() {
-                chiral_class_buffer.push(bytes[*position] as char);
                 *position += 1;
                 temp_counter += 1;
                 if temp_counter > 2 {
-                    return Err(ParseError::ChiralClass("Chiral class is too long".to_string()));
+                    return Err(ParseError::ChiralClass(
+                        "Chiral class is too long".to_string(),
+                    ));
                 }
             }
             while bytes[*position].is_ascii_digit() {
                 *position += 1;
             }
-            self.chiral_class = parse_chiral_class(&bytes,start_position, position)?;
+            self.chiral_class = parse_chiral_class(&bytes[start_position..*position])?;
         }
-
-        self.handle_atom(atomic_number)?;
-
         Ok(())
     }
-}
+    /// Parses a SMILES string and returns a Molecule
+    ///
+    /// # Arguments
+    /// * `smiles` - A string slice that holds the SMILES string
+    ///
+    /// # Example
+    /// ```
+    /// use molecules::io::SMILESParser;
+    /// let molecule = SMILESParser::parse_smiles("C(C(C))COcCl").unwrap();
+    /// assert_eq!(molecule.atoms.len(), 7);
+    /// ```
+    pub fn parse_smiles(smiles: &str) -> Result<Molecule, ParseError> {
+        let mut parser = SMILESParser::default();
 
-/// Parses a SMILES string and returns a Molecule
-///
-/// # Arguments
-/// * `smiles` - A string slice that holds the SMILES string
-///
-/// # Example
-/// ```
-/// use molecules::io::parse_smiles;
-/// let molecule = parse_smiles("C(C(C))COcCl").unwrap();
-/// assert!(false);
-/// ```
-pub fn parse_smiles(smiles: &str) -> Result<Molecule, ParseError> {
-    let mut parser = SMILESParser::new();
-
-    // SMILES should only be ASCII so we could bypass the UTF-8 checks using bytes()
-    let bytes = smiles.as_bytes();
-    let mut pointer = 0;
-    while pointer < bytes.len() { 
-        let Some(&byte) = bytes.get(pointer) else {
-            break;
-        };
-        pointer += 1;
-        match byte {
-           b'A'..=b'Z' => {
-                // Handle the previous element
-                parser.handle_atom(Some(byte))?
-            }
-           b'a'..=b'z' => {
+        // SMILES should only be ASCII so we could bypass the UTF-8 checks using bytes()
+        let bytes = smiles.as_bytes();
+        let mut pointer = 0;
+        while pointer < bytes.len() {
+            let Some(&byte) = bytes.get(pointer) else {
+                break;
+            };
+            pointer += 1;
+            match byte {
+                b'A'..=b'Z' => {
+                    // Handle the previous element
+                    parser.handle_atom(Some(byte))?
+                }
+                b'a'..=b'z' => {
                     // According to the SMILES specification, the lowercase letters are used to denote aromatic atoms if they are not complex
                     match byte {
-                       b'b' | b'c' | b'n' | b'o' | b's' | b'p' => parser.handle_atom(Some(byte))?,
-                       b'r' => {
+                        b'b' | b'c' | b'n' | b'o' | b's' | b'p' => {
+                            parser.handle_atom(Some(byte))?
+                        }
+                        b'r' => {
                             if parser.element_buffer == "B" {
                                 parser.element_buffer.push('R')
                             } else {
@@ -232,7 +238,7 @@ pub fn parse_smiles(smiles: &str) -> Result<Molecule, ParseError> {
                             }
                         }
 
-                       b'l' => {
+                        b'l' => {
                             if parser.element_buffer == "C" {
                                 parser.element_buffer.push('L')
                             } else {
@@ -241,100 +247,98 @@ pub fn parse_smiles(smiles: &str) -> Result<Molecule, ParseError> {
                         }
                         _ => return Err(ParseError::SMILESComplexError),
                     }
-            }
+                }
 
-           b'1'..=b'9' => {
-                parser.handle_number(byte)?;
-            }
-           b'-' => {
-                    parser.bonds.push((
-                        parser.current_atom_index,
-                        parser.current_atom_index + 1,
-                        BondType::Single,
-                    ));
-            }
-           b'=' => {
-                parser.last_bond_type = BondType::Double;
-            }
-           b'#' => {
-                parser.last_bond_type = BondType::Triple;
-            }
-           b'$' => {
-                parser.last_bond_type = BondType::Quadruple;
-            }
-           b':' => {
-                parser.last_bond_type = BondType::Aromatic;
-            }
-           b'(' => {
-                parser.branch_stack.push(parser.current_atom_index);
-            }
-           b')' => parser.branch_exits += 1,
-           b'[' => {
-                parser.handle_complex_atom(bytes, &mut pointer)?;
-            
-            }
+                b'1'..=b'9' => {
+                    parser.handle_number(byte)?;
+                }
+                b'-' => {
+                    parser.last_bond_type = BondType::Single;
+                }
+                b'=' => {
+                    parser.last_bond_type = BondType::Double;
+                }
+                b'#' => {
+                    parser.last_bond_type = BondType::Triple;
+                }
+                b'$' => {
+                    parser.last_bond_type = BondType::Quadruple;
+                }
+                b':' => {
+                    parser.last_bond_type = BondType::Aromatic;
+                }
+                b'(' => {
+                    parser.branch_stack.push(parser.current_atom_index);
+                }
+                b')' => parser.branch_exits += 1,
+                b'[' => {
+                    parser.handle_complex_atom(bytes, &mut pointer)?;
+                }
 
-           b'%' => {
-                parser.is_double_digit = true;
+                b'%' => {
+                    parser.is_double_digit = true;
+                }
+                _ => (),
             }
-            _ => (),
         }
-    }
 
-    if !parser.element_buffer.is_empty() {
-        parser.handle_atom(None)?
-    }
-
-    // Add ring bonds
-    for (start, end) in parser.ring_bonds.values() {
-        if start.is_some() && end.is_some() {
-            parser
-                .bonds
-                .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
+        if !parser.element_buffer.is_empty() {
+            parser.handle_atom(None)?
         }
-    }
 
-    // Add bonds to the molecules
-    for bond in parser.bonds.iter() {
-        let atom1 = &mut parser.atoms[bond.0];
-        atom1.add_bond(Bond::new(bond.1, bond.2));
-        let atom2 = &mut parser.atoms[bond.1];
-        atom2.add_bond(Bond::new(bond.0, bond.2));
-    }
+        // Add ring bonds
+        for (start, end) in parser.ring_bonds.values() {
+            if start.is_some() && end.is_some() {
+                parser
+                    .bonds
+                    .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
+            }
+        }
 
-    Ok(Molecule::from_atoms(parser.atoms))
+        // Add bonds to the molecules
+        for bond in parser.bonds.iter() {
+            let atom1 = &mut parser.atoms[bond.0];
+            atom1.add_bond(Bond::new(bond.1, bond.2));
+            let atom2 = &mut parser.atoms[bond.1];
+            atom2.add_bond(Bond::new(bond.0, bond.2));
+        }
+
+        Ok(Molecule::from_atoms(parser.atoms))
+    }
 }
-
 
 fn byte_to_number(byte: u8) -> u8 {
     byte - b'0'
 }
 
-fn parse_chiral_class(bytes: &[u8],start_position: usize, position: &mut usize) -> Result<ChiralClass, ParseError> {
-    // TODO make this safe
-    let slice = &bytes[start_position..*position];
-
+fn parse_chiral_class(
+    slice: &[u8],
+) -> Result<ChiralClass, ParseError> {
+    println!("Slice: {:?}", slice);
     match slice {
-        s if s.starts_with(b"@") => {
-            Ok(ChiralClass::R)
-        }
-        s if s.starts_with(b"AL") => {
+        s if s.starts_with(b"@@") => Ok(ChiralClass::R),
+        s if s.starts_with(b"@AL") => {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::AL(number))
         }
-        s if s.starts_with(b"SP") => {
+        s if s.starts_with(b"@SP") => {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::SP(number))
-        },
-        s if s.starts_with(b"TB") => {
+        }
+        s if s.starts_with(b"@TB") => {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::TB(number))
-        },
-        s if s.starts_with(b"OH") => {
+        }
+        s if s.starts_with(b"@OH") => {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::OH(number))
-        },
-        _ => Err(ParseError::ChiralClass(String::from_utf8_lossy(slice).to_string())),
+        }
+        s if s.starts_with(b"@") => {
+            Ok(ChiralClass::S)
+        }
+        _ => Err(ParseError::ChiralClass(
+            String::from_utf8_lossy(slice).to_string(),
+        )),
     }
 }
 
@@ -348,7 +352,7 @@ fn parse_number_on_end_of_chiral_class(chiral_class: &[u8]) -> u8 {
     number
 }
 
-fn is_valid_isotope(atomic_number: u8,isotope: u16) -> bool {
+fn is_valid_isotope(atomic_number: u8, isotope: u16) -> bool {
     let isotopes = ISOTOPES.get(atomic_number as usize).unwrap();
     for iso in isotopes.iter().flatten() {
         // TODO check if this is correct
@@ -357,5 +361,47 @@ fn is_valid_isotope(atomic_number: u8,isotope: u16) -> bool {
         }
     }
     false
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_smiles() {
+        let molecule = SMILESParser::parse_smiles("C(C(C))COcCl").unwrap();
+        assert_eq!(molecule.atoms.len(), 7);
+    }
+
+    #[test]
+    fn test_parse_smiles_with_isotope() {
+        let molecule = SMILESParser::parse_smiles("CCCC[13C]").unwrap();
+        println!("{:#?}", molecule);
+        assert_eq!(molecule.atoms.len(), 5);
+        assert_eq!(molecule.atoms[4].isotope.unwrap(), 13);
+    }
+
+    #[test]
+    fn test_parse_smiles_with_chiral_class() {
+        let molecule = SMILESParser::parse_smiles("C[C@](F)(Cl)Br").unwrap();
+        println!("{:#?}", molecule);
+        assert_eq!(molecule.atoms.len(), 5);
+        assert_eq!(molecule.atoms[1].chiral_class, ChiralClass::S);
+    }
+
+    #[test]
+    fn test_parse_smiles_with_complex_atom_and_isotope() {
+        let molecule = SMILESParser::parse_smiles("C[C@](F)(Cl)Br[13C]").unwrap();
+        println!("{:#?}", molecule);
+        assert_eq!(molecule.atoms.len(), 6);
+        assert_eq!(molecule.atoms[5].isotope.unwrap(), 13);
+    }
+    
+    #[test]
+    fn test_bond_parsing() {
+        let molecule = SMILESParser::parse_smiles("C-C=C#C").unwrap();
+        println!("{:#?}", molecule);
+        assert_eq!(molecule.atoms.len(), 4);
+        assert_eq!(molecule.get_edges().len(), 3);
+    }
 }
