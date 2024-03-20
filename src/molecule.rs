@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::consts::{
     ATOMIC_NUMBERS, ATOMIC_RADII, ATOMIC_SYMBOLS, BOND_SEARCH_THRESHOLD, BOND_TOLERANCE,
     ELECTRONEGATIVITIES, MONOISOTOPIC_MASSES, PRIMES, STANDARD_ATOMIC_WEIGHTS, VALENCIES,
@@ -19,7 +20,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
 pub enum ChiralClass {
     S,
     R,
@@ -27,6 +28,7 @@ pub enum ChiralClass {
     SP(u8),
     TB(u8),
     OH(u8),
+    #[default]
     None,
 }
 
@@ -398,8 +400,9 @@ impl Bond {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub enum BondType {
+    #[default]
     Single,
     Double,
     Triple,
@@ -424,6 +427,7 @@ impl Display for BondType {
 pub struct Molecule {
     pub atoms: Vec<Atom>,
     pub charge: i32,
+    pub atom_classes: IntMap<usize, u8>,
 }
 
 pub struct MolecularSystem {
@@ -444,7 +448,7 @@ impl MolecularSystem {
 
         let mut atom_groups: Vec<Vec<String>> = vec![Vec::new()];
 
-        for line in reader.lines().flatten() {
+        for line in reader.lines().map_while(Result::ok) {
             if line.starts_with("ATOM") || line.starts_with("HETATM") {
                 atom_groups.last_mut().unwrap().push(line);
             } else if line.starts_with("TER") {
@@ -545,6 +549,12 @@ impl Molecule {
             ..Default::default()
         }
     }
+    
+    pub fn with_classes(mut self, atom_classes: IntMap<usize, u8>) -> Self {
+        self.atom_classes = atom_classes;
+        self
+    }
+
 
     pub fn atoms(&self) -> &Vec<Atom> {
         &self.atoms
@@ -560,6 +570,18 @@ impl Molecule {
 
     pub fn nth_atom(&self, index: usize) -> &Atom {
         &self.atoms[index]
+    }
+
+    pub fn class_of_atom(&self, atom_index: usize) -> u8 {
+        *self.atom_classes.get(&atom_index).unwrap_or(&0)
+    }
+
+    pub fn set_class_of_atom(&mut self, atom_index: usize, class: u8) {
+        self.atom_classes.insert(atom_index, class);
+    }
+
+    pub fn classes(&self) -> &IntMap<usize, u8> {
+        &self.atom_classes
     }
 
     pub fn get_charge(&self, atom_index: usize) -> i8 {
@@ -1935,67 +1957,6 @@ pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
     })
 }
 
-// Unit tests (Still needs to be improved)
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_extract_atom() {
-        let line =
-            "ATOM      1  N   ALA A   1      10.000  10.000  10.000  1.00  0.00           N  ";
-        let atom = super::extract_atom_pdb(line).unwrap();
-        let position = atom.position_vector.unwrap();
-        assert_eq!(atom.atomic_number, 7);
-        assert_eq!(position.x, 10.0);
-        assert_eq!(position.y, 10.0);
-        assert_eq!(position.z, 10.0);
-    }
-    #[test]
-    fn test_vector_angle() {
-        let v1 = super::Vector {
-            x: 1.0,
-            y: 0.0,
-            z: 0.0,
-        };
-        let v2 = super::Vector {
-            x: 0.0,
-            y: 1.0,
-            z: 0.0,
-        };
-        let angle = v1.angle_between(&v2);
-        assert_eq!(angle, std::f64::consts::FRAC_PI_2);
-    }
-    #[test]
-    fn test_cross_product() {
-        let v1 = super::Vector {
-            x: 1.0,
-            y: 0.0,
-            z: 0.0,
-        };
-        let v2 = super::Vector {
-            x: 0.0,
-            y: 1.0,
-            z: 0.0,
-        };
-        let v3 = v1.cross(&v2);
-        assert_eq!(v3.x, 0.0);
-        assert_eq!(v3.y, 0.0);
-        assert_eq!(v3.z, 1.0);
-    }
-    #[test]
-    fn test_bond_angle() {
-        use super::*;
-        let atom1 = Atom::new(6).with_position((1.5, 0.0, 0.0));
-        let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
-        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.5));
-        let mut molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
-        molecule.identify_bonds(2.0);
-        let angles = molecule.find_angles();
-        println!("{:?}", angles);
-        assert_eq!(angles.len(), 1);
-        assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
-    }
-}
-
 struct GMLReactionRule {
     before: Molecule,
     context: Molecule,
@@ -2257,4 +2218,64 @@ fn order_by_degree(degrees: &[usize]) -> Vec<usize> {
     let mut degree_indices = (0..degrees.len()).collect::<Vec<_>>();
     degree_indices.sort_by(|&a, &b| degrees[a].cmp(&degrees[b]).then_with(|| a.cmp(&b)));
     degree_indices
+}
+// Unit tests (Still needs to be improved)
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_extract_atom() {
+        let line =
+            "ATOM      1  N   ALA A   1      10.000  10.000  10.000  1.00  0.00           N  ";
+        let atom = super::extract_atom_pdb(line).unwrap();
+        let position = atom.position_vector.unwrap();
+        assert_eq!(atom.atomic_number, 7);
+        assert_eq!(position.x, 10.0);
+        assert_eq!(position.y, 10.0);
+        assert_eq!(position.z, 10.0);
+    }
+    #[test]
+    fn test_vector_angle() {
+        let v1 = super::Vector {
+            x: 1.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        let v2 = super::Vector {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        };
+        let angle = v1.angle_between(&v2);
+        assert_eq!(angle, std::f64::consts::FRAC_PI_2);
+    }
+    #[test]
+    fn test_cross_product() {
+        let v1 = super::Vector {
+            x: 1.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        let v2 = super::Vector {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        };
+        let v3 = v1.cross(&v2);
+        assert_eq!(v3.x, 0.0);
+        assert_eq!(v3.y, 0.0);
+        assert_eq!(v3.z, 1.0);
+    }
+    #[test]
+    fn test_bond_angle() {
+        use super::*;
+        let atom1 = Atom::new(6).with_position((1.5, 0.0, 0.0));
+        let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
+        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.5));
+        let mut molecule = Molecule::from_atoms(vec![atom1, atom2, atom3]);
+        molecule.identify_bonds(2.0);
+        let angles = molecule.find_angles();
+        println!("{:?}", angles);
+        assert_eq!(angles.len(), 1);
+        assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
+    }
 }
