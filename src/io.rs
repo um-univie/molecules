@@ -25,7 +25,7 @@ pub struct SMILESParser {
     element_buffer: String,
     isotope: Option<u16>,
     chiral_class: ChiralClass,
-    atom_class: Option<u8>,
+    current_atom_class: Option<u8>,
     atom_classes: IntMap<usize, u8>,
     last_bond_type: BondType,
     ring_number: Option<usize>,
@@ -63,7 +63,6 @@ impl SMILESParser {
                 break;
             };
             pointer += 1;
-            println!("Byte: {}", byte as char);
             match byte {
                 b'A'..=b'Z' => {
                     // Handle the previous element
@@ -95,6 +94,8 @@ impl SMILESParser {
                 }
 
                 b'.' => {
+                    parser.handle_atom(None)?;
+                    parser.add_all_bonds();
                     molecules.push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
                     parser = SMILESParser::default();
                 }
@@ -140,53 +141,70 @@ impl SMILESParser {
             parser.handle_atom(None)?
         }
 
-        // Add ring bonds
-        for (start, end) in parser.ring_bonds.values() {
-            if start.is_some() && end.is_some() {
-                parser
-                    .bonds
-                    .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
-            }
-        }
-
-        for (atom, number) in parser.hydrogens.iter() {
-            let hydrogen_index = parser.current_atom_index;
-            for index in 0..*number {
-                parser.atoms.push(Atom::new(1));
-                parser.bonds.push((*atom, hydrogen_index + index as usize, BondType::Single));
-            }
-        }
-
-        // Add bonds to the molecules
-        for bond in parser.bonds.iter() {
-            let atom1 = &mut parser.atoms[bond.0];
-            atom1.add_bond(Bond::new(bond.1, bond.2));
-            let atom2 = &mut parser.atoms[bond.1];
-            atom2.add_bond(Bond::new(bond.0, bond.2));
-        }
-
+        parser.add_all_bonds();
 
         molecules.push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
         Ok(molecules)
     }
 
+    fn add_all_bonds(&mut self) {
+        #[cfg(debug_assertions)]
+        println!("Ring bonds: {:?}", self.ring_bonds);
+        for (start, end) in self.ring_bonds.values() {
+            if start.is_some() && end.is_some() {
+                self
+                    .bonds
+                    .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        println!("Hydrogens: {:?}", self.hydrogens);
+        for (atom, number) in self.hydrogens.iter() {
+            let hydrogen_index = self.current_atom_index;
+            for index in 0..*number {
+                self.atoms.push(Atom::new(1));
+                self.bonds.push((*atom, hydrogen_index + index as usize, BondType::Single));
+            }
+        }
+
+        // Add bonds to the molecule
+        for bond in self.bonds.iter() {
+            let atom1 = &mut self.atoms[bond.0];
+            atom1.add_bond(Bond::new(bond.1, bond.2));
+            let atom2 = &mut self.atoms[bond.1];
+            atom2.add_bond(Bond::new(bond.0, bond.2));
+        }
+    }
+
     fn handle_branch(&mut self) -> Result<(), ParseError> {
-        let Some(mut branch_atom) = self.branch_stack.pop() else {
-            return Err(ParseError::InvalidBranch);
-        };
-        self.branch_exits -= 1;
         // Pop the stack until we find the last branch atom
-        while self.branch_exits > 0 {
-            branch_atom = self.branch_stack.pop().unwrap();
-            self.branch_exits -= 1;
+        let mut branch_atom = None;
+        while let Some(branch) = self.branch_stack.pop() {
+            branch_atom = Some(branch);
+            if self.branch_exits > 0 {
+                self.branch_exits -= 1;
+            } else {
+                return Err(ParseError::InvalidBranch);
+            }
+            if self.branch_exits == 0 {
+              break;  
+            }
+        }
+
+        if self.branch_exits > 0 {
+            return Err(ParseError::InvalidBranch);
         }
         
-        self.bonds
-            .push((branch_atom, self.current_atom_index, self.last_bond_type));
-        if self.is_multiple_branch {
-            // If we have multiple branches, we need to push the current atom back on the stack 
-            self.branch_stack.push(branch_atom);
-            self.is_multiple_branch = false;
+        if let Some(branch_atom) = branch_atom {
+            self.bonds.push((branch_atom, self.current_atom_index, self.last_bond_type));
+            if self.is_multiple_branch {
+                // If we have multiple branches, we need to push the current atom back on the stack 
+                self.branch_stack.push(branch_atom);
+                self.is_multiple_branch = false;
+            }
+        } else {
+            return Err(ParseError::BondNotFound);
         }
         Ok(())
     }
@@ -248,9 +266,9 @@ impl SMILESParser {
                 self.current_atom_charge = None;
             }
 
-            if let Some(atom_class) = self.atom_class {
+            if let Some(atom_class) = self.current_atom_class {
                 self.atom_classes.insert(self.current_atom_index, atom_class);
-                self.atom_class = None;
+                self.current_atom_class = None;
             }
 
             self.atoms.push(atom);
@@ -263,6 +281,7 @@ impl SMILESParser {
         Ok(())
     }
 
+    // TODO handle invalid ring numbers
     fn handle_number(&mut self, byte: u8) -> Result<(), ParseError> {
         if self.is_double_digit {
             if let Some(ring_number_value) = self.ring_number {
@@ -286,6 +305,12 @@ impl SMILESParser {
         } else {
             return Err(ParseError::RingIndexError);
         }
+
+        // This means we have invaid format e.g. C11 instead of C1 or C%11
+        if start == end {
+            return Err(ParseError::RingIndexError);
+        }
+
         self.ring_number = None;
         Ok(())
     }
@@ -386,7 +411,7 @@ impl SMILESParser {
         if bytes[*position] == b':' {
             *position += 1;
             if bytes[*position].is_ascii_digit() {
-                self.atom_class = Some(byte_to_number(bytes[*position]));
+                self.current_atom_class = Some(byte_to_number(bytes[*position]));
             } else {
                 return Err(ParseError::AtomClassMissing);
             }
@@ -438,7 +463,12 @@ fn parse_number_on_end_of_chiral_class(chiral_class: &[u8]) -> u8 {
 }
 
 fn is_valid_isotope(atomic_number: u8, isotope: u16) -> bool {
-    let isotopes = ISOTOPES.get(atomic_number as usize).unwrap();
+    let Some(isotopes) = ISOTOPES.get(atomic_number as usize) else {
+        // If the atomic number is not found, we assume that the isotope is not valid
+        // This is a bit of a hack but it should work
+        return false;
+    };
+
     for iso in isotopes.iter().flatten() {
         // TODO check if this is correct
         if iso.mass.round() as u16 == isotope {
@@ -480,7 +510,8 @@ mod tests {
     
     #[test]
     fn test_parse_smiles_with_complex_atom_and_hydrogen() {
-        let molecules  = SMILESParser::parse_smiles("C[C@H](Cl)Br").unwrap();
+        let molecules  = SMILESParser::parse_smiles("C[C@H](Cl)C").unwrap();
+        println!("{:#?}", molecules);
         assert_eq!(molecules[0].atoms.len(), 5);
         assert_eq!(molecules[0].atoms[1].bonds().len(), 4);
     }
@@ -507,5 +538,12 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_submolecule() {
+        let molecules = SMILESParser::parse_smiles("C(C(C))COcCl.C(C(C))").unwrap();
+        let submolecule = molecules[0].match_submolecule(&molecules[1]).unwrap();
+        assert_eq!(submolecule.len(), 3);
     }
 }

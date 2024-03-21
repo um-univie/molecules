@@ -3,6 +3,7 @@ use crate::consts::{
     ATOMIC_NUMBERS, ATOMIC_RADII, ATOMIC_SYMBOLS, BOND_SEARCH_THRESHOLD, BOND_TOLERANCE,
     ELECTRONEGATIVITIES, MONOISOTOPIC_MASSES, PRIMES, STANDARD_ATOMIC_WEIGHTS, VALENCIES,
 };
+use petgraph::algo::subgraph_isomorphisms_iter;
 use crate::vector::Vector;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
@@ -679,6 +680,73 @@ impl Molecule {
 
         "".to_string()
     }
+
+    /// Compares the electronegativities of two atoms
+    ///
+    /// # Arguments
+    /// * 'atom1_index' - The index of the first atom.
+    /// * 'atom2_index' - The index of the second atom.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use molecules::molecule::Molecule;
+    /// let molecule = Molecule::from_xyz("tests/ethane.xyz");
+    /// assert_eq!(molecule.cmp_electronegativities(0, 1), std::cmp::Ordering::Equal);
+    /// ```
+    pub fn cmp_electronegativities(
+        &self,
+        atom1_index: usize,
+        atom2_index: usize,
+    ) -> std::cmp::Ordering {
+        self.atoms[atom1_index]
+            .electronegativity()
+            .cmp(&self.atoms[atom2_index].electronegativity())
+    }
+
+    pub fn match_submolecule(&self, other: &Self) -> Option<IntMap<usize, usize>> {
+        let mut self_components = self.get_components();
+        let mut other_components = other.get_components();
+
+        // If the molecules are the same size and have the same connectivity as well as
+        // atomic_number we can assume they are the same molecule
+        if self.atoms.len() == other.atoms.len()
+            && self
+                .atoms
+                .iter()
+                .zip(other.atoms.iter())
+                .all(|(atom1, atom2)| {
+                    atom1.atomic_number == atom2.atomic_number && atom1.bonds() == atom2.bonds()
+                })
+        {
+            let mut mapping = IntMap::default();
+            for (index, _) in self.atoms.iter().enumerate() {
+                mapping.insert(index, index);
+            }
+            return Some(mapping);
+        }
+
+        self_components.retain(|component| component.len() > 1);
+        other_components.retain(|component| component.len() > 1);
+
+        for self_component in &mut self_components {
+            let graph1 = self.to_ungraph_from_slice(self_component);
+            let g_ref = &graph1;
+            for other_component in &mut other_components {
+                let graph2 = other.to_ungraph_from_slice(other_component);
+
+                let h_ref = &graph2;
+
+                if let Some(mapping) = subgraph_isomorphism(h_ref, g_ref, self_component) {
+                    #[cfg(debug_assertions)]
+                    println!("Mapping chosen: {:?}", mapping);
+                    return Some(mapping);
+                }
+            }
+        }
+        None
+    }
+
 
     pub fn identify_bond_changes(&self, other: &Self) -> Vec<BondChange> {
         let mut bond_changes: Vec<BondChange> = Vec::new();
@@ -2177,6 +2245,7 @@ impl Molecule {
                 println!("Morgan's algorithm did not converge after 100 iterations");
                 break;
             }
+            #[cfg(debug_assertions)]
             println!("{:?}", vertex_degrees);
             for (index, atom) in self.atoms().iter().enumerate() {
                 let sum = atom
@@ -2200,6 +2269,43 @@ impl Molecule {
     }
 }
 
+pub fn subgraph_isomorphism(
+        h_ref: &UnGraph<u8, ()>,
+        g_ref: &UnGraph<u8, ()>,
+        component: &[usize],
+    ) -> Option<IntMap<usize, usize>> {
+        subgraph_isomorphisms_iter(
+            &h_ref,
+            &g_ref,
+            &mut |node1, node2| node1 == node2,
+            &mut |edge1, edge2| edge1 == edge2,
+        )
+        .and_then(|mappings| {
+            mappings
+                .min_by(|mapping1, mapping2| {
+                    #[cfg(debug_assertions)]
+                    println!("Mapping1: {:?}, Mapping2: {:?}", mapping1, mapping2);
+                    // Here we search for a higher ordering of the mapping as this is more likely
+                    // with respect to the graph
+                    mapping1
+                        .windows(2)
+                        .map(|window| if window[0] > window[1] { 0 } else { 1 })
+                        .sum::<usize>()
+                        .cmp(
+                            &mapping2
+                                .windows(2)
+                                .map(|window| if window[0] > window[1] { 0 } else { 1 })
+                                .sum::<usize>(),
+                        )
+                })
+                .map(|mapping| {
+                    mapping
+                        .into_iter()
+                        .map(|index| (component[index], index))
+                        .collect::<IntMap<usize, usize>>()
+                })
+        })
+    }
 fn reconstruct_path(mut current_node: usize, parents: &[Option<usize>]) -> Vec<usize> {
     let mut path = Vec::new();
 
@@ -2279,3 +2385,5 @@ mod tests {
         assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
     }
 }
+
+
