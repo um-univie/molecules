@@ -417,8 +417,8 @@ impl Display for BondType {
             BondType::Single => write!(f, "-"),
             BondType::Double => write!(f, "="),
             BondType::Triple => write!(f, "#"),
-            BondType::Quadruple => write!(f, "$"),
             BondType::Aromatic => write!(f, ":"),
+            BondType::Quadruple => write!(f, "$"),
         }
     }
 }
