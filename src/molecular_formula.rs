@@ -6,7 +6,6 @@ use core::{
     str::FromStr,
 };
 use ndarray::{s, Array1};
-use rustfft::{num_complex::Complex, FftPlanner};
 
 use nohash_hasher::IntMap;
 
@@ -98,91 +97,93 @@ impl MolecularFormula {
             acc + STANDARD_ATOMIC_WEIGHTS[*atom as usize] * *count as f64
         })
     }
-    /// Calculates the isotopic pattern of the molecular formula.
-    ///
-    /// # Arguments
-    /// * `max_mass_difference` - The maximum mass difference between the monoisotopic peak and the
-    /// last peak in the isotopic pattern to be calculated.
-    /// # Examples
-    /// ```
-    /// use molecules::molecular_formula::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let isotopic_pattern_h2o = water.isotopic_pattern(3,1);
-    ///
-    /// println!("{:?}", isotopic_pattern_h2o);
-    /// println!("{:?}", water);
-    /// assert!(isotopic_pattern_h2o.len() == 3);
-    ///
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// let isotopic_pattern_methane = methane.isotopic_pattern(3,1);
-    /// println!("{:?}", isotopic_pattern_methane);
-    /// assert!(isotopic_pattern_methane.len() == 3);
-    /// println!("{:?}", water);
-    /// ```
-    pub fn isotopic_pattern(
-        &self,
-        max_mass_difference: usize,
-        resolution: usize,
-    ) -> Vec<(f64, f64)> {
-        let min_mass: usize = self.monoisotopic_mass().round() as usize;
-        let max_mass = min_mass + max_mass_difference;
-        let mut total_distribution = Array1::<f64>::zeros(max_mass * resolution + 1);
-        total_distribution[0] = 1.0;
+    //This is commented out due to a saftey issue with the fft crate
 
-        let mut planner = FftPlanner::new();
-        let fft = planner.plan_fft_forward(total_distribution.len());
-        let ifft = planner.plan_fft_inverse(total_distribution.len());
+    // Calculates the isotopic pattern of the molecular formula.
+    //
+    // # Arguments
+    // * `max_mass_difference` - The maximum mass difference between the monoisotopic peak and the
+    // last peak in the isotopic pattern to be calculated.
+    // # Examples
+    // ```
+    // use molecules::molecular_formula::MolecularFormula;
+    // let water = "H2O".parse::<MolecularFormula>().unwrap();
+    // let isotopic_pattern_h2o = water.isotopic_pattern(3,1);
+    //
+    // println!("{:?}", isotopic_pattern_h2o);
+    // println!("{:?}", water);
+    // assert!(isotopic_pattern_h2o.len() == 3);
+    //
+    // let methane = "CH4".parse::<MolecularFormula>().unwrap();
+    // let isotopic_pattern_methane = methane.isotopic_pattern(3,1);
+    // println!("{:?}", isotopic_pattern_methane);
+    // assert!(isotopic_pattern_methane.len() == 3);
+    // println!("{:?}", water);
+    // ```
+    //  pub fn isotopic_pattern(
+    //      &self,
+    //      max_mass_difference: usize,
+    //      resolution: usize,
+    //  ) -> Vec<(f64, f64)> {
+    //      let min_mass: usize = self.monoisotopic_mass().round() as usize;
+    //      let max_mass = min_mass + max_mass_difference;
+    //      let mut total_distribution = Array1::<f64>::zeros(max_mass * resolution + 1);
+    //      total_distribution[0] = 1.0;
 
-        let mut atom_distribution = Array1::<f64>::zeros(max_mass * resolution + 1);
-        for (atomic_number, count) in self.elements.iter() {
-            if let Some(atom) = ISOTOPES.get(*atomic_number as usize) {
-                for _ in 0..*count {
-                    atom_distribution.fill(0.0);
-                    for isotope in atom.iter().flatten() {
-                        atom_distribution[(isotope.mass * resolution as f64).round() as usize] =
-                            isotope.abundance;
-                    }
+    //      let mut planner = FftPlanner::new();
+    //      let fft = planner.plan_fft_forward(total_distribution.len());
+    //      let ifft = planner.plan_fft_inverse(total_distribution.len());
 
-                    // Preparing input for FFT
-                    let mut distribution_fft = total_distribution
-                        .iter()
-                        .map(|&v| Complex::new(v, 0.0))
-                        .collect::<Vec<Complex<f64>>>();
-                    let mut atom_distribution_fft = atom_distribution
-                        .iter()
-                        .map(|&v| Complex::new(v, 0.0))
-                        .collect::<Vec<Complex<f64>>>();
-                    // Apply FFT
-                    fft.process(&mut distribution_fft);
-                    fft.process(&mut atom_distribution_fft);
+    //      let mut atom_distribution = Array1::<f64>::zeros(max_mass * resolution + 1);
+    //      for (atomic_number, count) in self.elements.iter() {
+    //          if let Some(atom) = ISOTOPES.get(*atomic_number as usize) {
+    //              for _ in 0..*count {
+    //                  atom_distribution.fill(0.0);
+    //                  for isotope in atom.iter().flatten() {
+    //                      atom_distribution[(isotope.mass * resolution as f64).round() as usize] =
+    //                          isotope.abundance;
+    //                  }
 
-                    // Convolution in the frequency domain
-                    let mut convoluted = distribution_fft
-                        .iter()
-                        .zip(atom_distribution_fft.iter())
-                        .map(|(a, b)| a * b)
-                        .collect::<Vec<Complex<f64>>>();
+    //                  // Preparing input for FFT
+    //                  let mut distribution_fft = total_distribution
+    //                      .iter()
+    //                      .map(|&v| Complex::new(v, 0.0))
+    //                      .collect::<Vec<Complex<f64>>>();
+    //                  let mut atom_distribution_fft = atom_distribution
+    //                      .iter()
+    //                      .map(|&v| Complex::new(v, 0.0))
+    //                      .collect::<Vec<Complex<f64>>>();
+    //                  // Apply FFT
+    //                  fft.process(&mut distribution_fft);
+    //                  fft.process(&mut atom_distribution_fft);
 
-                    // Apply inverse FFT
-                    ifft.process(&mut convoluted);
-                    total_distribution =
-                        Array1::from(convoluted.iter().map(|v| v.re).collect::<Vec<f64>>());
-                }
-            }
-        }
+    //                  // Convolution in the frequency domain
+    //                  let mut convoluted = distribution_fft
+    //                      .iter()
+    //                      .zip(atom_distribution_fft.iter())
+    //                      .map(|(a, b)| a * b)
+    //                      .collect::<Vec<Complex<f64>>>();
 
-        // Normalization
-        let sum = total_distribution.sum();
-        total_distribution
-            .slice(s![min_mass * resolution..max_mass * resolution])
-            .mapv(|v| v / sum)
-            .into_iter()
-            .zip(
-                (min_mass * resolution..max_mass * resolution)
-                    .map(|v| v as f64 / resolution as f64),
-            )
-            .collect::<Vec<(f64, f64)>>()
-    }
+    //                  // Apply inverse FFT
+    //                  ifft.process(&mut convoluted);
+    //                  total_distribution =
+    //                      Array1::from(convoluted.iter().map(|v| v.re).collect::<Vec<f64>>());
+    //              }
+    //          }
+    //      }
+
+    //      // Normalization
+    //      let sum = total_distribution.sum();
+    //      total_distribution
+    //          .slice(s![min_mass * resolution..max_mass * resolution])
+    //          .mapv(|v| v / sum)
+    //          .into_iter()
+    //          .zip(
+    //              (min_mass * resolution..max_mass * resolution)
+    //                  .map(|v| v as f64 / resolution as f64),
+    //          )
+    //          .collect::<Vec<(f64, f64)>>()
+    //  }
     // pub fn isotopic_pattern(&self, max_mass_difference: usize, resolution: usize) -> Vec<f64> {
     //     let min_mass: usize = self.monoisotopic_mass().round() as usize;
     //     let max_mass = min_mass + max_mass_difference;

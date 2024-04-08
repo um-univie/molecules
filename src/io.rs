@@ -38,7 +38,6 @@ pub struct SMILESParser {
     is_aromatic: bool,
 }
 
-
 impl SMILESParser {
     /// Parses a SMILES string and returns a Molecule
     /// # Arguments
@@ -78,7 +77,9 @@ impl SMILESParser {
                             if parser.element_buffer == "B" {
                                 parser.element_buffer.push('R')
                             } else {
-                                return Err(ParseError::InvalidAromatic(parser.element_buffer.clone()));
+                                return Err(ParseError::InvalidAromatic(
+                                    parser.element_buffer.clone(),
+                                ));
                             }
                         }
 
@@ -86,17 +87,23 @@ impl SMILESParser {
                             if parser.element_buffer == "C" {
                                 parser.element_buffer.push('L')
                             } else {
-                                return Err(ParseError::InvalidAromatic(parser.element_buffer.clone()));
+                                return Err(ParseError::InvalidAromatic(
+                                    parser.element_buffer.clone(),
+                                ));
                             }
                         }
-                        anything_else => {parser.element_buffer.push(anything_else as char);return Err(ParseError::InvalidAromatic(parser.element_buffer.clone()))},
+                        anything_else => {
+                            parser.element_buffer.push(anything_else as char);
+                            return Err(ParseError::InvalidAromatic(parser.element_buffer.clone()));
+                        }
                     }
                 }
 
                 b'.' => {
                     parser.handle_atom(None)?;
                     parser.add_all_bonds();
-                    molecules.push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
+                    molecules
+                        .push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
                     parser = SMILESParser::default();
                 }
 
@@ -152,8 +159,7 @@ impl SMILESParser {
         println!("Ring bonds: {:?}", self.ring_bonds);
         for (start, end) in self.ring_bonds.values() {
             if start.is_some() && end.is_some() {
-                self
-                    .bonds
+                self.bonds
                     .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
             }
         }
@@ -164,7 +170,8 @@ impl SMILESParser {
             let hydrogen_index = self.current_atom_index;
             for index in 0..*number {
                 self.atoms.push(Atom::new(1));
-                self.bonds.push((*atom, hydrogen_index + index as usize, BondType::Single));
+                self.bonds
+                    .push((*atom, hydrogen_index + index as usize, BondType::Single));
             }
         }
 
@@ -188,18 +195,19 @@ impl SMILESParser {
                 return Err(ParseError::InvalidBranch);
             }
             if self.branch_exits == 0 {
-              break;  
+                break;
             }
         }
 
         if self.branch_exits > 0 {
             return Err(ParseError::InvalidBranch);
         }
-        
+
         if let Some(branch_atom) = branch_atom {
-            self.bonds.push((branch_atom, self.current_atom_index, self.last_bond_type));
+            self.bonds
+                .push((branch_atom, self.current_atom_index, self.last_bond_type));
             if self.is_multiple_branch {
-                // If we have multiple branches, we need to push the current atom back on the stack 
+                // If we have multiple branches, we need to push the current atom back on the stack
                 self.branch_stack.push(branch_atom);
                 self.is_multiple_branch = false;
             }
@@ -260,14 +268,15 @@ impl SMILESParser {
                 atom = atom.with_chiral_class(self.chiral_class);
                 self.chiral_class = ChiralClass::None;
             }
-            
+
             if let Some(charge) = self.current_atom_charge {
                 atom = atom.with_charge(charge);
                 self.current_atom_charge = None;
             }
 
             if let Some(atom_class) = self.current_atom_class {
-                self.atom_classes.insert(self.current_atom_index, atom_class);
+                self.atom_classes
+                    .insert(self.current_atom_index, atom_class);
                 self.current_atom_class = None;
             }
 
@@ -294,7 +303,9 @@ impl SMILESParser {
             }
         }
 
-        let Some(ring) = self.ring_number else {return Ok(())};
+        let Some(ring) = self.ring_number else {
+            return Ok(());
+        };
 
         let (start, end) = self.ring_bonds.entry(ring).or_insert((None, None));
         // If start is None, then we are at the start of the bond
@@ -352,7 +363,7 @@ impl SMILESParser {
             self.element_buffer.push(bytes[*position] as char);
             if bytes[*position + 1].is_ascii_lowercase() {
                 *position += 1;
-                 self.element_buffer.push(bytes[*position] as char);
+                self.element_buffer.push(bytes[*position] as char);
             }
         }
 
@@ -384,7 +395,8 @@ impl SMILESParser {
             *position += 1;
             // Theoretically we could have more than 9 hydrogen in extreme cases but it is not accepted in SMILES
             if bytes[*position].is_ascii_digit() {
-                self.hydrogens.insert(self.current_atom_index, byte_to_number(bytes[*position]));
+                self.hydrogens
+                    .insert(self.current_atom_index, byte_to_number(bytes[*position]));
             } else {
                 self.hydrogens.insert(self.current_atom_index, 1);
             }
@@ -396,7 +408,9 @@ impl SMILESParser {
             if bytes[*position].is_ascii_digit() {
                 match sign {
                     b'+' => self.current_atom_charge = Some(byte_to_number(bytes[*position]) as i8),
-                    b'-' => self.current_atom_charge = Some(-(byte_to_number(bytes[*position]) as i8)),
+                    b'-' => {
+                        self.current_atom_charge = Some(-(byte_to_number(bytes[*position]) as i8))
+                    }
                     _ => (), // This should never happen
                 }
             } else {
@@ -416,7 +430,7 @@ impl SMILESParser {
                 return Err(ParseError::AtomClassMissing);
             }
         }
-            self.handle_bond()?;
+        self.handle_bond()?;
         Ok(())
     }
 }
@@ -498,7 +512,8 @@ mod tests {
     #[test]
     fn test_parse_smiles_with_chiral_class() {
         let molecules = SMILESParser::parse_smiles("C[C@](F)(Cl)Br").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 5); assert_eq!(molecules[0].atoms[1].chiral_class, ChiralClass::S);
+        assert_eq!(molecules[0].atoms.len(), 5);
+        assert_eq!(molecules[0].atoms[1].chiral_class, ChiralClass::S);
     }
 
     #[test]
@@ -507,10 +522,10 @@ mod tests {
         assert_eq!(molecules[0].atoms.len(), 6);
         assert_eq!(molecules[0].atoms[5].isotope.unwrap(), 13);
     }
-    
+
     #[test]
     fn test_parse_smiles_with_complex_atom_and_hydrogen() {
-        let molecules  = SMILESParser::parse_smiles("C[C@H](Cl)C").unwrap();
+        let molecules = SMILESParser::parse_smiles("C[C@H](Cl)C").unwrap();
         println!("{:#?}", molecules);
         assert_eq!(molecules[0].atoms.len(), 5);
         assert_eq!(molecules[0].atoms[1].bonds().len(), 4);

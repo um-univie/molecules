@@ -245,12 +245,12 @@ fn assemble_reaction_rule(
                 "edge [source {} target {} label \"{}\"]",
                 index1,
                 index2,
-                    prior_molecule.atoms[*index1]
-                        .bonds()
-                        .iter()
-                        .find(|bond| bond.target() == *index2)
-                        .unwrap()
-                        .bond_type()
+                prior_molecule.atoms[*index1]
+                    .bonds()
+                    .iter()
+                    .find(|bond| bond.target() == *index2)
+                    .unwrap()
+                    .bond_type()
             )
         })
         .collect::<Vec<String>>()
@@ -280,13 +280,13 @@ fn assemble_reaction_rule(
                 index1,
                 index2,
                 prior_molecule.atoms[*index1]
-                        .bonds()
-                        .iter()
-                        .find(|bond| bond.target() == *index2)
-                        .unwrap()
-                        .bond_type()
-                )
-                .to_string()
+                    .bonds()
+                    .iter()
+                    .find(|bond| bond.target() == *index2)
+                    .unwrap()
+                    .bond_type()
+            )
+            .to_string()
         })
         .collect::<Vec<String>>()
         .join("\n");
@@ -318,11 +318,11 @@ fn assemble_reaction_rule(
                 index1,
                 index2,
                 post_molecule.atoms[*index1]
-                        .bonds()
-                        .iter()
-                        .find(|bond| bond.target() == *index2)
-                        .unwrap()
-                        .bond_type()
+                    .bonds()
+                    .iter()
+                    .find(|bond| bond.target() == *index2)
+                    .unwrap()
+                    .bond_type()
             )
         })
         .collect::<Vec<String>>()
