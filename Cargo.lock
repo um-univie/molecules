@@ -170,15 +170,6 @@ checksum = "0175f63815ce00183bf755155ad0cb48c65226c5d17a724e369c25418d2b7699"
 
 [[package]]
 name = "itertools"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
@@ -188,9 +179,9 @@ dependencies = [
 
 [[package]]
 name = "kiddo"
-version = "3.0.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35808272ecb78a5610c70d5bc238ede78520200a4651c2c3fc59d64ba2bea28a"
+checksum = "9d2f8d9e1bc7c6919ad2cdc83472a9a4b5ed2ea2c5392c9514fdf958a7920f9a"
 dependencies = [
  "az",
  "divrem",
@@ -199,13 +190,10 @@ dependencies = [
  "fixed",
  "generator",
  "init_with",
- "itertools 0.11.0",
+ "itertools",
  "log",
  "num-traits",
  "ordered-float",
- "rand",
- "rand_chacha",
- "rayon",
  "sorted-vec",
  "tracing",
  "tracing-subscriber",
@@ -242,9 +230,9 @@ dependencies = [
 
 [[package]]
 name = "molecules"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
- "itertools 0.12.1",
+ "itertools",
  "kiddo",
  "lazy_static",
  "ndarray",
@@ -462,9 +450,9 @@ checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "rayon"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4963ed1bc86e4f3ee217022bd855b297cef07fb9eac5dfa1f788b220b49b3bd"
+checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
 dependencies = [
  "either",
  "rayon-core",
