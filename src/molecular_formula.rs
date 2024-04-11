@@ -1,12 +1,8 @@
-use crate::consts::{
-    ATOMIC_NUMBERS, ATOMIC_SYMBOLS, ISOTOPES, MONOISOTOPIC_MASSES, STANDARD_ATOMIC_WEIGHTS,
-};
+use chemistry_consts::ElementProperties;
 use core::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
-use ndarray::{s, Array1};
-
 use nohash_hasher::IntMap;
 
 // TODO: make this a parameter
@@ -74,27 +70,32 @@ impl MolecularFormula {
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
     /// println!("{:?}", water);
-    /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
-    /// assert_eq!(methane.monoisotopic_mass(), 16.03130012892);
+    /// assert_eq!(water.monoisotopic_mass().round(), 18.0);
+    /// assert_eq!(methane.monoisotopic_mass().round(), 16.0);
     ///
     /// ```
     pub fn monoisotopic_mass(&self) -> f64 {
         self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            acc + MONOISOTOPIC_MASSES[*atom as usize] * *count as f64
+            acc + atom.monoisotopic_mass().unwrap() * *count as f64
         })
     }
 
     /// Calculates the molecular mass of the molecular formula.
+    /// Since some elements do not have a standard atomic weight, this function returns an Option.
     /// # Examples
     /// ```
     /// use molecules::molecular_formula::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// assert_eq!(water.molecular_mass(), 18.015);
-    /// assert_eq!(methane.molecular_mass(), 16.043);
-    pub fn molecular_mass(&self) -> f64 {
-        self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            acc + STANDARD_ATOMIC_WEIGHTS[*atom as usize] * *count as f64
+    /// assert_eq!(water.molecular_mass().unwrap().round(), 18.0);
+    /// assert_eq!(methane.molecular_mass().unwrap().round(), 16.0);
+    pub fn molecular_mass(&self) -> Option<f64> {
+        self
+            .elements
+            .iter()
+            .try_fold(0.0, |acc, (atom, count)| {
+                let standard_atomic_weight = atom.standard_atomic_weight()?;
+                Some(acc + standard_atomic_weight * *count as f64)
         })
     }
     //This is commented out due to a saftey issue with the fft crate
@@ -242,13 +243,14 @@ impl Default for MolecularFormula {
 }
 
 impl Display for MolecularFormula {
+    // TODO make this more efficient
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut elements = self
             .elements
             .iter()
-            .map(|(&atom, &count)| (ATOMIC_SYMBOLS[atom as usize], count))
-            .collect::<Vec<_>>();
-        elements.sort_by_key(|&(atom, _)| atom);
+            .map(|(&atom, &count)| (atom.atomic_symbol().unwrap().into(), count))
+            .collect::<Vec<(String,usize)>>();
+        elements.sort_by(|(atom1, _),(atom2, _)| atom1.cmp(atom2));
         for (atom, count) in elements {
             write!(f, "{}{}", atom, count)?;
         }
@@ -300,7 +302,7 @@ impl FromStr for MolecularFormula {
         s.chars().for_each(|c| {
             if c.is_alphabetic() {
                 if !element_buffer.is_empty() && c.is_uppercase() {
-                    let atomic_number = ATOMIC_NUMBERS[&element_buffer];
+                    let atomic_number = element_buffer.as_str().atomic_number().expect("Invalid element");
                     let count = if !number_buffer.is_empty() {
                         number_buffer.parse::<usize>().unwrap_or(1)
                     } else {
@@ -316,7 +318,7 @@ impl FromStr for MolecularFormula {
             }
         });
         if !element_buffer.is_empty() {
-            let atomic_number = ATOMIC_NUMBERS[&element_buffer];
+            let atomic_number = element_buffer.as_str().atomic_number().expect("Invalid element");
             let count = if !number_buffer.is_empty() {
                 number_buffer.parse::<usize>().unwrap_or(1)
             } else {

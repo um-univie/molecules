@@ -44,7 +44,7 @@ impl Molecule {
                 let _ = writeln!(
                     atoms,
                     "node [id {index} label \"{}{}\"]",
-                    atom.name(),
+                    atom.atomic_symbol().unwrap_or("Unknown"),
                     charge
                 );
 
@@ -84,7 +84,7 @@ impl Molecule {
             }
             atoms.push_str(&format!(
                 "node [id {index} label \"{}{}\"]\n",
-                atom.name(),
+                atom.atomic_symbol().unwrap_or("Unknown"),
                 charge
             ));
             for &bond in atom.bonds().iter() {
@@ -224,7 +224,7 @@ fn assemble_reaction_rule(
             format!(
                 "node [id {} label \"{}{}\"]",
                 charge_change.0,
-                prior_molecule.atoms[charge_change.0].name(),
+                prior_molecule.atoms[charge_change.0].atomic_symbol().unwrap_or("Unknown"),
                 {
                     let charge = prior_molecule.atoms[charge_change.0].charge();
                     match charge {
@@ -264,7 +264,7 @@ fn assemble_reaction_rule(
                 acc,
                 "node [id {} label \"{}\"]",
                 index,
-                prior_molecule.atoms[*index].name()
+                prior_molecule.atoms[*index].atomic_symbol().unwrap_or("Unknown")
             );
             acc
         });
@@ -297,7 +297,7 @@ fn assemble_reaction_rule(
             format!(
                 "node [id {} label \"{}{}\"]",
                 charge_change.0,
-                post_molecule.atoms[charge_change.0].name(),
+                post_molecule.atoms[charge_change.0].atomic_symbol().unwrap_or("Unknown"),
                 {
                     let charge = post_molecule.atoms[charge_change.0].charge();
                     match charge {

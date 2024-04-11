@@ -1,4 +1,4 @@
-use crate::consts::{ATOMIC_NUMBERS, ISOTOPES};
+use chemistry_consts::ElementProperties; 
 use crate::molecule::{Atom, Bond, BondType, ChiralClass, Molecule};
 use nohash_hasher::IntMap;
 
@@ -235,8 +235,7 @@ impl SMILESParser {
 
     fn handle_atom(&mut self, byte: Option<u8>) -> Result<(), ParseError> {
         if !self.element_buffer.is_empty() {
-            let atomic_number = ATOMIC_NUMBERS
-                .get(&self.element_buffer.to_uppercase())
+            let atomic_number = &self.element_buffer.to_uppercase().as_str().atomic_number()
                 .ok_or(ParseError::ElementNotFound(self.element_buffer.to_owned()))?;
 
             let mut atom = Atom::new(*atomic_number);
@@ -477,13 +476,13 @@ fn parse_number_on_end_of_chiral_class(chiral_class: &[u8]) -> u8 {
 }
 
 fn is_valid_isotope(atomic_number: u8, isotope: u16) -> bool {
-    let Some(isotopes) = ISOTOPES.get(atomic_number as usize) else {
+    let Some(isotopes) = atomic_number.isotopes() else {
         // If the atomic number is not found, we assume that the isotope is not valid
         // This is a bit of a hack but it should work
         return false;
     };
 
-    for iso in isotopes.iter().flatten() {
+    for iso in isotopes {
         // TODO check if this is correct
         if iso.mass.round() as u16 == isotope {
             return true;

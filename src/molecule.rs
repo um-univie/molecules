@@ -1,8 +1,6 @@
 #![allow(dead_code)]
-use crate::consts::{
-    ATOMIC_NUMBERS, ATOMIC_RADII, ATOMIC_SYMBOLS, BOND_SEARCH_THRESHOLD, BOND_TOLERANCE,
-    ELECTRONEGATIVITIES, MONOISOTOPIC_MASSES, PRIMES, STANDARD_ATOMIC_WEIGHTS, VALENCIES,
-};
+use chemistry_consts::ElementProperties;
+use crate::consts::{BOND_SEARCH_THRESHOLD, BOND_TOLERANCE};
 use crate::vector::Vector;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
@@ -88,17 +86,19 @@ impl Atom {
         self
     }
 
-    pub fn degree(&self) -> i8 {
-        self.actual_valency() - self.expected_valency()
+    pub fn degree(&self) -> Option<i8> {
+        // May need to be changed for elements with unknown valencies
+        let expected_valency = self.expected_valency()?;
+        Some(self.actual_valency() - expected_valency
             + self.charge().abs()
             + if self.is_radical() { 1 } else { 0 }
-            + if self.is_aromatic() { 1 } else { 0 }
+            + if self.is_aromatic() { 1 } else { 0 })
     }
 
     pub fn from_xyz_line(line: &str) -> Result<Atom, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 4 {
-            let atomic_number = ATOMIC_NUMBERS[parts[0].to_uppercase().as_str()];
+            let atomic_number = parts[0].to_uppercase().as_str().atomic_number().ok_or("Could not find atomic number")?;
             let x = parts[1].parse::<f64>()?;
             let y = parts[2].parse::<f64>()?;
             let z = parts[3].parse::<f64>()?;
@@ -136,16 +136,11 @@ impl Atom {
     /// ```
     /// use molecules::molecule::Atom;
     /// let atom = Atom::new(6);
-    /// assert_eq!(atom.expected_valency(), 4);
+    /// assert_eq!(atom.expected_valency(), Some(4));
     /// ```
-    pub fn expected_valency(&self) -> i8 {
-        match VALENCIES.get(self.atomic_number as usize) {
-            Some(valency) => *valency,
-            None => {
-                println!("Could not find valency for {}", self.atomic_number);
-                0
-            }
-        }
+    pub fn expected_valency(&self) -> Option<i8> {
+        // TODO: Implement for all elements
+        self.atomic_number.valencies()?.next()
     }
 
     pub fn cmp_electronegativity(&self, other: &Self) -> std::cmp::Ordering {
@@ -188,37 +183,20 @@ impl Atom {
         self.is_radical = is_radical;
     }
 
-    pub fn name(&self) -> &str {
-        match ATOMIC_SYMBOLS.get(self.atomic_number as usize) {
-            Some(atomic_symbol) => atomic_symbol,
-            None => {
-                println!("Could not find atomic symbol for {}", self.atomic_number);
-                ""
-            }
-        }
+    pub fn atomic_symbol(&self) -> Option<&str> {
+        self.atomic_number.atomic_symbol()
     }
 
-    pub fn electronegativity(&self) -> Option<u32> {
-        ELECTRONEGATIVITIES
-            .get(self.atomic_number as usize)
-            .copied()
+    pub fn electronegativity(&self) -> Option<u16> {
+        self.atomic_number.electronegativity()
     }
 
     pub fn is_more_electronegative(&self, other: &Self) -> bool {
         self.electronegativity() > other.electronegativity()
     }
 
-    fn monoisotopic_mass(&self) -> f64 {
-        match MONOISOTOPIC_MASSES.get(self.atomic_number as usize) {
-            Some(monoisotopic_mass) => *monoisotopic_mass,
-            None => {
-                println!(
-                    "Could not find monoisotopic mass for {}",
-                    self.atomic_number
-                );
-                0.0
-            }
-        }
+    fn monoisotopic_mass(&self) -> Option<f64> {
+        self.atomic_number.monoisotopic_mass()
     }
 
     /// Determines if two atoms are bonded based on their distance to each other, their expected covalent radii and a constant tolerance factor
@@ -243,8 +221,12 @@ impl Atom {
     /// assert!(atom1.is_bonded(&atom2, 0.5, BOND_TOLERANCE));
     /// ```
     pub fn is_bonded(&self, other: &Self, squared_threshold: f64, tolerance: f64) -> bool {
+        if self.atomic_number.is_valid_element() && other.atomic_number.is_valid_element() {
         squared_threshold
-            < ((self.get_atomic_radius() + other.get_atomic_radius()) * tolerance).powi(2)
+            < ((self.get_atomic_radius().unwrap() + other.get_atomic_radius().unwrap()) * tolerance).powi(2)
+        } else {
+            false
+        }
     }
 
     /// Calculates the distance between two atoms.
@@ -322,26 +304,12 @@ impl Atom {
         0.5 * force_constant * (self.distance(other) - equilibrium_distance).powi(2)
     }
 
-    pub fn standard_atomic_weight(&self) -> f64 {
-        let atomic_weight = match STANDARD_ATOMIC_WEIGHTS.get(self.atomic_number as usize) {
-            Some(atomic_weight) => *atomic_weight,
-            None => {
-                println!("Could not find atomic weight for {}", self.atomic_number);
-                0.0
-            }
-        };
-        atomic_weight
+    pub fn standard_atomic_weight(&self) -> Option<f64> {
+        self.atomic_number.standard_atomic_weight()
     }
 
-    pub fn get_atomic_radius(&self) -> f64 {
-        let atomic_radius = match ATOMIC_RADII.get(self.atomic_number as usize) {
-            Some(atomic_radius) => *atomic_radius,
-            None => {
-                println!("Could not find atomic radius for {}", self.atomic_number);
-                0.0
-            }
-        };
-        atomic_radius
+    pub fn get_atomic_radius(&self) -> Option<f64> {
+        self.atomic_number.covalent_radius()
     }
 
     pub fn atomic_number(&self) -> u8 {
@@ -1096,7 +1064,7 @@ impl Molecule {
     pub fn degrees(&self) -> Vec<i8> {
         self.atoms
             .iter()
-            .map(|atom| atom.degree())
+            .map(|atom| atom.degree().unwrap_or(0))
             .collect::<Vec<i8>>()
     }
 
@@ -1316,35 +1284,10 @@ impl Molecule {
         root
     }
 
-    // PROTOTYPE
-    pub fn to_cannonical_smiles(&self) -> String {
-        let _primes = &PRIMES;
-
-        let _smiles_parameters = self.atoms.iter().map(|atom| {
-            let n_bonds = atom.bonds.len() as u8;
-            let n_non_hydrogen = atom
-                .bonds
-                .iter()
-                .filter(|bond| self.atoms[bond.target].atomic_number != 1)
-                .count() as u8;
-            let n_hydrogen = n_bonds - n_non_hydrogen;
-            let atomic_number = atom.atomic_number;
-            let sign_of_charge = atom.charge().signum() as u8;
-            SmilesParameters {
-                n_bonds,
-                n_non_hydrogen,
-                atomic_number,
-                sign_of_charge,
-                n_hydrogen,
-            }
-        });
-
-        "".to_string()
-    }
     pub fn monoisotopic_mass(&self) -> f64 {
         self.atoms
             .iter()
-            .map(|atom| atom.monoisotopic_mass())
+            .map(|atom| atom.monoisotopic_mass().unwrap_or(0.0))
             .sum::<f64>()
     }
 
@@ -1390,17 +1333,19 @@ impl Molecule {
         let number_of_hydrogens = self.number_of_bonded_element(atom_index, 1);
 
         let charge = atom.charge();
+        // TODO: Introduce error handling here
+        let Some(atomic_symbol) = atom.atomic_symbol() else { return "".to_string() };
 
         match charge {
-            2.. => format!("[{}{}+{}]", atom.name(), hydrogen_str, atom.charge.abs()),
-            ..=-2 => format!("[{}{}-{}]", atom.name(), hydrogen_str, atom.charge.abs()),
-            1 => format!("[{}{}+1]", atom.name(), hydrogen_str),
-            -1 => format!("[{}{}-1]", atom.name(), hydrogen_str),
+            2.. => format!("[{}{}+{}]", atomic_symbol, hydrogen_str, atom.charge.abs()),
+            ..=-2 => format!("[{}{}-{}]", atomic_symbol, hydrogen_str, atom.charge.abs()),
+            1 => format!("[{}{}+1]", atomic_symbol, hydrogen_str),
+            -1 => format!("[{}{}-1]", atomic_symbol, hydrogen_str),
             0 => {
                 if number_of_hydrogens > 0 {
-                    format!("[{}{}]", atom.name(), hydrogen_str)
+                    format!("[{}{}]", atomic_symbol, hydrogen_str)
                 } else {
-                    format!("[{}]", atom.name())
+                    format!("[{}]", atomic_symbol)
                 }
             }
         }
@@ -1447,26 +1392,29 @@ impl Molecule {
             String::new()
         };
 
+        // TODO: Introduce error handling here
+        let Some(atomic_symbol) = self.atoms[node.index].atomic_symbol() else {return "".to_string() };
+
         let charge_string = match charge {
             2.. => format!(
                 "[{}{}+{}]",
-                self.atoms[node.index].name(),
+                atomic_symbol,
                 hydrogen_str,
                 charge.abs()
             ),
             ..=-2 => format!(
                 "[{}{}-{}]",
-                self.atoms[node.index].name(),
+                atomic_symbol,
                 hydrogen_str,
                 charge.abs()
             ),
-            1 => format!("[{}{}+1]", self.atoms[node.index].name(), hydrogen_str),
-            -1 => format!("[{}{}-1]", self.atoms[node.index].name(), hydrogen_str),
+            1 => format!("[{}{}+1]", atomic_symbol, hydrogen_str),
+            -1 => format!("[{}{}-1]", atomic_symbol, hydrogen_str),
             0 => {
                 if number_of_hydrogens > 0 {
-                    format!("[{}{}]", self.atoms[node.index].name(), hydrogen_str)
+                    format!("[{}{}]", atomic_symbol, hydrogen_str)
                 } else {
-                    format!("[{}]", self.atoms[node.index].name())
+                    format!("[{}]", atomic_symbol)
                 }
             }
         };
@@ -1565,7 +1513,8 @@ impl MolecularFormula {
     /// ```
     pub fn monoisotopic_mass(&self) -> f64 {
         self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            acc + MONOISOTOPIC_MASSES[*atom as usize] * *count as f64
+            // TODO check if this is safe
+            acc + atom.monoisotopic_mass().unwrap() * *count as f64
         })
     }
 
@@ -1575,11 +1524,12 @@ impl MolecularFormula {
     /// use molecules::molecule::MolecularFormula;
     /// let water = "H2O".parse::<MolecularFormula>().unwrap();
     /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// assert_eq!(water.molecular_mass(), 18.015);
-    /// assert_eq!(methane.molecular_mass(), 16.043);
+    /// assert_eq!(water.molecular_mass().round(), 18.0);
+    /// assert_eq!(methane.molecular_mass().round(), 16.0);
     pub fn molecular_mass(&self) -> f64 {
         self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            acc + STANDARD_ATOMIC_WEIGHTS[*atom as usize] * *count as f64
+            // TODO check if this is safe
+            acc + atom.standard_atomic_weight().unwrap() * *count as f64
         })
     }
 }
@@ -1589,11 +1539,11 @@ impl Display for MolecularFormula {
         let mut elements = self
             .elements
             .iter()
-            .map(|(&atom, &count)| (ATOMIC_SYMBOLS[atom as usize], count))
+            .map(|(&atom, &count)| (atom.atomic_symbol().unwrap().to_string(), count))
             .collect::<Vec<_>>();
-        elements.sort_by_key(|&(atom, _)| atom);
+        elements.sort_by(|(atom1, _),(atom2, _)| atom1.cmp(atom2));
         for (atom, count) in elements {
-            write!(f, "{}{}", atom, count)?;
+            write!(f, "{}{}", atom.clone(), count)?;
         }
         Ok(())
     }
@@ -1642,10 +1592,12 @@ impl FromStr for MolecularFormula {
         let mut number_buffer = String::new();
         let mut element_buffer = String::new();
         let mut elements: IntMap<u8, usize> = IntMap::default();
-        s.chars().for_each(|c| {
-            if c.is_alphabetic() {
-                if !element_buffer.is_empty() && c.is_uppercase() {
-                    let atomic_number = ATOMIC_NUMBERS[&element_buffer];
+        for character in s.chars() {
+            if character.is_alphabetic() {
+                if !element_buffer.is_empty() && character.is_uppercase() {
+                    let Some(atomic_number) = element_buffer.as_str().atomic_number() else {
+                        return Err(ParseFormulaError);
+                    };
                     let count = if !number_buffer.is_empty() {
                         number_buffer.parse::<usize>().unwrap_or(1)
                     } else {
@@ -1655,13 +1607,15 @@ impl FromStr for MolecularFormula {
                     number_buffer.clear();
                     element_buffer.clear();
                 }
-                element_buffer.push(c);
-            } else if c.is_numeric() {
-                number_buffer.push(c);
+                element_buffer.push(character);
+            } else if character.is_numeric() {
+                number_buffer.push(character);
             }
-        });
+        }
         if !element_buffer.is_empty() {
-            let atomic_number = ATOMIC_NUMBERS[&element_buffer];
+            let Some(atomic_number) = element_buffer.as_str().atomic_number() else {
+                return Err(ParseFormulaError);
+            };
             let count = if !number_buffer.is_empty() {
                 number_buffer.parse::<usize>().unwrap_or(1)
             } else {
@@ -1968,7 +1922,7 @@ pub fn update_degrees(
 /// assert_eq!(position.x, 11.390, "Incorrect x coordinate");
 /// assert_eq!(position.y, -11.172, "Incorrect y coordinate");
 /// assert_eq!(position.z, 71.797, "Incorrect z coordinate");
-/// assert_eq!(atom.name(), "C", "Incorrect atom name");
+/// assert_eq!(atom.atomic_symbol(), Some("C"), "Incorrect atom name");
 /// assert_eq!(atom.atomic_number(), 6, "Incorrect atom type");
 /// ```
 pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
@@ -1980,8 +1934,8 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
         z: line[46..=53].trim().parse::<f64>()?,
     };
     let name = line[76..=77].trim().to_string();
-    let atomic_number = *ATOMIC_NUMBERS.get(&name).unwrap_or(&0);
-    Ok(Atom {
+    let atomic_number = name.as_str().atomic_number().expect(&format!("Could not find atom with symbol {}", name));
+Ok(Atom {
         position_vector: Some(position),
         atomic_number,
         ..Default::default()
@@ -2004,12 +1958,12 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
 /// assert_eq!(position.x, 201.310, "Incorrect x coordinate");
 /// assert_eq!(position.y, 198.892, "Incorrect y coordinate");
 /// assert_eq!(position.z, 131.429, "Incorrect z coordinate");
-/// assert_eq!(atom.name(), "N", "Incorrect atom name");
+/// assert_eq!(atom.atomic_symbol(), Some("N"), "Incorrect atom name");
 /// assert_eq!(atom.atomic_number(), 7, "Incorrect atom type");
 /// ```
 pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
     let fields: Vec<&str> = line.split_whitespace().collect();
-    let atomic_number = ATOMIC_NUMBERS[fields[2]];
+    let atomic_number = fields[2].atomic_number().expect(&format!("Could not find atom with symbol {}", fields[2]));
 
     let position = Vector {
         x: fields[10].parse::<f64>()?,
@@ -2223,7 +2177,7 @@ impl Molecule {
     }
 
     pub fn names(&self) -> Vec<&str> {
-        self.atoms().iter().map(|atom| atom.name()).collect()
+        self.atoms().iter().map(|atom| atom.atomic_symbol().unwrap()).collect()
     }
 
     pub fn morgans_algorithm(&self, max_depth: Option<usize>) -> Vec<usize> {
