@@ -1335,10 +1335,10 @@ impl Molecule {
         let charge = self.atoms[node.index].charge;
         let number_of_hydrogens = self.number_of_bonded_element(node.index, 1);
 
-        let hydrogen_str = if number_of_hydrogens > 0 {
-            format!("H{}", number_of_hydrogens)
-        } else {
-            String::new()
+        let hydrogen_str = match number_of_hydrogens { 
+            0 => String::new(),
+            1 => "H".to_string(),
+            _ => format!("H{}", number_of_hydrogens),
         };
 
         // TODO: Introduce error handling here
