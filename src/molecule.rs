@@ -1319,57 +1319,6 @@ impl Molecule {
         smiles
     }
 
-    pub fn format_atom(&self, atom_index: usize) -> String {
-        let atom = match self.atoms.get(atom_index) {
-            Some(atom) => atom,
-            None => return "".to_string(),
-        };
-        let hydrogen_str = if atom.atomic_number() == 1 {
-            "H".to_string()
-        } else {
-            "".to_string()
-        };
-
-        let number_of_hydrogens = self.number_of_bonded_element(atom_index, 1);
-
-        let charge = atom.charge();
-        // TODO: Introduce error handling here
-        let Some(atomic_symbol) = atom.atomic_symbol() else { return "".to_string() };
-
-        match charge {
-            2.. => format!("[{}{}+{}]", atomic_symbol, hydrogen_str, atom.charge.abs()),
-            ..=-2 => format!("[{}{}-{}]", atomic_symbol, hydrogen_str, atom.charge.abs()),
-            1 => format!("[{}{}+1]", atomic_symbol, hydrogen_str),
-            -1 => format!("[{}{}-1]", atomic_symbol, hydrogen_str),
-            0 => {
-                if number_of_hydrogens > 0 {
-                    format!("[{}{}]", atomic_symbol, hydrogen_str)
-                } else {
-                    format!("[{}]", atomic_symbol)
-                }
-            }
-        }
-    }
-    // This function works but it does not provide the desired output
-    // pub fn to_canon_smiles(&self) -> String {
-    //     use nauty_pet::prelude::*;
-    //     let molecules = self.split_components();
-
-    //     for molecule in &molecules {
-    //         println!("Morgan\n{:?}\n", molecule.canonicalize());
-    //         let graph = molecule.to_ungraph();
-    //         println!("Graph\n {:?}\n", graph);
-
-    //         let canon_labeling = graph.clone().into_canon();
-    //         println!("Canon labeling\n{:?}\n", canon_labeling);
-
-    //         println!("Is the same: {:?}", canon_labeling.is_identical(&graph));
-    //     }
-
-    //     println!("====================\n");
-    //     String::new()
-    // }
-
     fn construct_smiles(
         &self,
         node: &Node,
@@ -1414,7 +1363,7 @@ impl Molecule {
                 if number_of_hydrogens > 0 {
                     format!("[{}{}]", atomic_symbol, hydrogen_str)
                 } else {
-                    format!("[{}]", atomic_symbol)
+                    atomic_symbol.to_string()
                 }
             }
         };
@@ -1422,7 +1371,11 @@ impl Molecule {
 
         if let Some(closures) = ring_closures.get(&node.index) {
             for closure in closures {
-                smiles.push_str(&format!("{}{}", closure.1, closure.0));
+                if closure.1 == BondType::Single {
+                    smiles.push_str(&format!("{}", closure.0));
+                } else {
+                   smiles.push_str(&format!("{}{}", closure.1, closure.0));
+                }
             }
         }
 
