@@ -1,6 +1,6 @@
 use crate::molecule::{BondChange, Molecule};
-use nohash_hasher::IntMap;
-use std::collections::{HashMap, HashSet};
+use nohash_hasher::{IntMap,IntSet};
+use std::collections::{HashMap};
 use std::fmt::Write;
 
 impl Molecule {
@@ -120,7 +120,7 @@ impl Molecule {
     pub fn extract_reaction_rule(&self, other: &Molecule, radius: usize) {
         let charge_changes = self.charge_changes(other);
 
-        let changed_nodes: HashSet<usize> =
+        let changed_nodes: IntSet<usize> =
             charge_changes.iter().map(|changes| changes.0).collect();
 
         let bond_changes = self.identify_bond_changes(other);

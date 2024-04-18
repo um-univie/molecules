@@ -1,11 +1,10 @@
-#![allow(dead_code)]
 use chemistry_consts::ElementProperties;
 use crate::consts::{BOND_SEARCH_THRESHOLD, BOND_TOLERANCE};
 use crate::vector::Vector;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
 use kiddo::{KdTree, SquaredEuclidean};
-use nohash_hasher::IntMap;
+use nohash_hasher::{IntMap, IntSet};
 use petgraph::algo::subgraph_isomorphisms_iter;
 use petgraph::prelude::*;
 use rayon::prelude::*;
@@ -1887,7 +1886,7 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
         z: line[46..=53].trim().parse::<f64>()?,
     };
     let name = line[76..=77].trim().to_string();
-    let atomic_number = name.as_str().atomic_number().expect(&format!("Could not find atom with symbol {}", name));
+    let atomic_number = name.as_str().atomic_number().unwrap_or_else(|| panic!("Could not find atom with symbol {}", name));
 Ok(Atom {
         position_vector: Some(position),
         atomic_number,
@@ -1916,7 +1915,7 @@ Ok(Atom {
 /// ```
 pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
     let fields: Vec<&str> = line.split_whitespace().collect();
-    let atomic_number = fields[2].atomic_number().expect(&format!("Could not find atom with symbol {}", fields[2]));
+    let atomic_number = fields[2].atomic_number().unwrap_or_else(|| panic!("Could not find atom with symbol {}", fields[2]));
 
     let position = Vector {
         x: fields[10].parse::<f64>()?,
@@ -1954,7 +1953,7 @@ impl Molecule {
     /// assert_eq!(shortest_path, vec![1,0,2]);
     /// ```
     ///
-    pub fn find_shortest_path_of_set(&self, atom_set: &HashSet<usize>) -> Option<Vec<usize>> {
+    pub fn find_shortest_path_of_set(&self, atom_set: &IntSet<usize>) -> Option<Vec<usize>> {
         let shortest_paths: Vec<Vec<usize>> = atom_set
             .iter()
             .combinations(2)

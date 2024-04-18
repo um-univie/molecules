@@ -1,6 +1,6 @@
-use chemistry_consts::ElementProperties; 
-use crate::molecule::{Atom, Bond, BondType, ChiralClass, Molecule};
-use nohash_hasher::IntMap;
+pub use chemistry_consts::ElementProperties; 
+pub use crate::molecule::{Atom, Bond, BondType, ChiralClass, Molecule};
+pub use nohash_hasher::IntMap;
 
 #[derive(Debug)]
 pub enum ParseError {
