@@ -194,7 +194,7 @@ impl Atom {
         self.electronegativity() > other.electronegativity()
     }
 
-    fn monoisotopic_mass(&self) -> Option<f64> {
+    pub fn monoisotopic_mass(&self) -> Option<f64> {
         self.atomic_number.monoisotopic_mass()
     }
 
