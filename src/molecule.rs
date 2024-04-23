@@ -670,7 +670,7 @@ impl Molecule {
             .cmp(&self.atoms[atom2_index].electronegativity())
     }
 
-    pub fn match_submolecule(&self, other: &Self) -> Option<IntMap<usize, usize>> {
+    pub fn match_submolecule(&self, other: &Self) -> Option<Vec<IntMap<usize, usize>>> {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
 
@@ -689,7 +689,7 @@ impl Molecule {
             for (index, _) in self.atoms.iter().enumerate() {
                 mapping.insert(index, index);
             }
-            return Some(mapping);
+            return Some(vec![mapping]);
         }
 
         self_components.retain(|component| component.len() > 1);
@@ -703,11 +703,23 @@ impl Molecule {
 
                 let h_ref = &graph2;
 
-                if let Some(mapping) = subgraph_isomorphism(h_ref, g_ref, self_component) {
+                if let Some(mappings) =  subgraph_isomorphisms_iter(
+                    &h_ref,
+                    &g_ref,
+                    &mut |node1, node2| node1 == node2,
+                    &mut |edge1, edge2| edge1 == edge2,
+                ) {
+                    let mapping = 
+                        mappings.map(|mapping| {
+                                mapping
+                                    .into_iter()
+                                    .map(|index| (self_component[index], index))
+                                    .collect::<IntMap<usize, usize>>()
+                            }).collect::<Vec<IntMap<usize, usize>>>();
                     #[cfg(debug_assertions)]
                     println!("Mapping chosen: {:?}", mapping);
                     return Some(mapping);
-                }
+                };
             }
         }
         None
@@ -2173,43 +2185,6 @@ impl Molecule {
     }
 }
 
-pub fn subgraph_isomorphism(
-    h_ref: &UnGraph<u8, ()>,
-    g_ref: &UnGraph<u8, ()>,
-    component: &[usize],
-) -> Option<IntMap<usize, usize>> {
-    subgraph_isomorphisms_iter(
-        &h_ref,
-        &g_ref,
-        &mut |node1, node2| node1 == node2,
-        &mut |edge1, edge2| edge1 == edge2,
-    )
-    .and_then(|mappings| {
-        mappings
-            .min_by(|mapping1, mapping2| {
-                #[cfg(debug_assertions)]
-                println!("Mapping1: {:?}, Mapping2: {:?}", mapping1, mapping2);
-                // Here we search for a higher ordering of the mapping as this is more likely
-                // with respect to the graph
-                mapping1
-                    .windows(2)
-                    .map(|window| if window[0] > window[1] { 0 } else { 1 })
-                    .sum::<usize>()
-                    .cmp(
-                        &mapping2
-                            .windows(2)
-                            .map(|window| if window[0] > window[1] { 0 } else { 1 })
-                            .sum::<usize>(),
-                    )
-            })
-            .map(|mapping| {
-                mapping
-                    .into_iter()
-                    .map(|index| (component[index], index))
-                    .collect::<IntMap<usize, usize>>()
-            })
-    })
-}
 fn reconstruct_path(mut current_node: usize, parents: &[Option<usize>]) -> Vec<usize> {
     let mut path = Vec::new();
 
