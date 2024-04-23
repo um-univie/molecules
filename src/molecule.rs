@@ -711,7 +711,7 @@ impl Molecule {
                         mappings.map(|mapping| {
                                 mapping
                                     .into_iter()
-                                    .map(|index| (self_component[index], index))
+                                    .map(|index| (self_component[index], other_component[index]))
                                     .collect::<IntMap<usize, usize>>()
                             }).collect::<Vec<IntMap<usize, usize>>>();
                     return Some(mapping);
