@@ -674,8 +674,6 @@ impl Molecule {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
 
-        // If the molecules are the same size and have the same connectivity as well as
-        // atomic_number we can assume they are the same molecule
         if self.atoms.len() == other.atoms.len()
             && self
                 .atoms
@@ -716,8 +714,6 @@ impl Molecule {
                                     .map(|index| (self_component[index], index))
                                     .collect::<IntMap<usize, usize>>()
                             }).collect::<Vec<IntMap<usize, usize>>>();
-                    #[cfg(debug_assertions)]
-                    println!("Mapping chosen: {:?}", mapping);
                     return Some(mapping);
                 };
             }
