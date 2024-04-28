@@ -1742,12 +1742,7 @@ fn backtrack_bonding(molecule: &mut Molecule, degrees: &mut [i8]) -> bool {
 
 pub fn relaxed_backtrack_bonding(molecule: &mut Molecule, degrees: &mut [i8]) -> bool {
     // If all degrees are zero or only one degree is negative (positive charge) then we are done
-    // TODO check what is going on here
-    // We can include the expected charge as an argument here that we have derived from the
-    // simulation summary file
-
     if degrees.iter().all(|&degree| degree >= 0) {
-        println!("All degrees are positive in relaxed backtrack bonding");
         return true;
     }
 
@@ -2158,8 +2153,7 @@ impl Molecule {
                 println!("Morgan's algorithm did not converge after 100 iterations");
                 break;
             }
-            #[cfg(debug_assertions)]
-            println!("{:?}", vertex_degrees);
+
             for (index, atom) in self.atoms().iter().enumerate() {
                 let sum = atom
                     .bonds()
