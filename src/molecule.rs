@@ -1933,11 +1933,6 @@ pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
     })
 }
 
-struct GMLReactionRule {
-    before: Molecule,
-    context: Molecule,
-    after: Molecule,
-}
 
 impl Molecule {
     /// Finds the shortest path of a set of atoms
