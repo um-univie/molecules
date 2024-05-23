@@ -1,6 +1,4 @@
-use crate::molecule::{BondChange, Molecule};
-use nohash_hasher::{IntMap,IntSet};
-use std::collections::{HashMap};
+use crate::molecule::Molecule;
 use std::fmt::Write;
 
 impl Molecule {
