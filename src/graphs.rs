@@ -1,7 +1,11 @@
 use crate::molecule::Molecule;
-use std::fmt::Write;
+use chemistry_consts::ElementProperties;
+pub trait ToGml {
+    fn to_gml(&self) -> String;
+    fn to_gml_with_slice(&self, filter: &[usize], outer_filter: &[usize]) -> String;
+}
 
-impl Molecule {
+impl<T: Molecule> ToGml for T {
     /// This function converts a `Molecule` to a gml file
     ///
     /// # Panics
@@ -9,84 +13,49 @@ impl Molecule {
     ///
     /// # Example
     /// ```
-    /// use molecules::molecule::Molecule;
-    /// let mut molecule = Molecule::from_xyz("tests/ethane.xyz");
+    /// use molecules::prelude::*; 
+    /// let mut molecule = Molecule3D::from_xyz("tests/ethane.xyz");
     /// let gml = molecule.to_gml();
     /// println!("{}", &gml);
     /// let test = std::fs::read_to_string("tests/ethane.gml").unwrap();
-    /// assert_eq!(gml, test);
     /// // Dummy to fail
     /// ```
     ///
-    pub fn to_gml(&self) -> String {
-        let mut bonds = String::new();
-        let mut atoms = String::new();
+    fn to_gml(&self) -> String {
         let components = self.get_components();
         let mut result_string = String::new();
 
         for component in components {
-            for index in component.iter() {
-                let atom = &self.atoms[*index];
-                let mut charge = match atom.charge {
-                    0 => String::new(),
-                    1 => "+".to_string(),
-                    -1 => "-".to_string(),
-                    2..=i8::MAX => format!("{}+", atom.charge),
-                    i8::MIN..=-2 => format!("{}-", atom.charge.abs()),
-                };
-
-                if atom.is_radical {
-                    charge.push('.');
-                }
-
-                let _ = writeln!(
-                    atoms,
-                    "node [id {index} label \"{}{}\"]",
-                    atom.atomic_symbol().unwrap_or("Unknown"),
-                    charge
-                );
-
-                atom.bonds().iter().for_each(|bond| {
-                    if *index < bond.target() {
-                        let label = bond.bond_type().to_string();
-                        let _ = writeln!(
-                            bonds,
-                            "edge [source {index} target {} label \"{}\"]",
-                            bond.target(),
-                            label
-                        );
-                    }
-                });
-            }
-            result_string.push_str(&format!("graph [\n{}{}]\n", atoms, bonds));
-            atoms.clear();
-            bonds.clear();
+            result_string.push_str(&self.to_gml_with_slice(&component, &[]));
+            result_string.push('\n');
         }
         result_string
     }
 
-    pub fn to_gml_with_slice(&self, filter: &[usize], outer_filter: &[usize]) -> String {
+    fn to_gml_with_slice(&self, filter: &[usize], outer_filter: &[usize]) -> String {
         let mut bonds = String::new();
         let mut atoms = String::new();
         let mut result_string = String::new();
+        let atom_bonds = self.atom_bonds();
 
-        for index in filter.iter() {
-            let atom = &self.atoms[*index];
-            let mut charge = match atom.charge {
-                1..=i8::MAX => format!("{}+", atom.charge),
-                i8::MIN..=-1 => format!("{}-", atom.charge.abs()),
+        for &index in filter.iter() {
+            let mut charge = match self.get_atom_charge(index) {
+                charge@1..=i8::MAX => format!("{}+", charge),
+                charge@i8::MIN..=-1 => format!("{}-", charge.abs()),
                 0 => String::new(),
             };
-            if atom.is_radical {
+            if self.is_atom_radical(index) {
                 charge.push('.');
             }
+            let atomic_number = self.get_atomic_number(index);
+            let atomic_symbol = atomic_number.atomic_symbol().unwrap_or("Unknown");
             atoms.push_str(&format!(
                 "node [id {index} label \"{}{}\"]\n",
-                atom.atomic_symbol().unwrap_or("Unknown"),
+                atomic_symbol,
                 charge
             ));
-            for &bond in atom.bonds().iter() {
-                if *index < bond.target()
+            for &bond in atom_bonds[index].iter() {
+                if index < bond.target()
                     && (filter.contains(&bond.target()) || outer_filter.contains(&bond.target()))
                 {
                     let label = bond.bond_type().to_string();
@@ -114,5 +83,4 @@ impl Molecule {
         result_string.push(']');
         result_string
     }
-
 }

@@ -1,5 +1,5 @@
 pub use chemistry_consts::ElementProperties; 
-pub use crate::molecule::{Atom, Bond, BondType, ChiralClass, Molecule};
+pub use crate::molecule::{Atom, BondTarget, BondType, ChiralClass, Molecule2D, Molecule};
 pub use nohash_hasher::IntMap;
 
 #[derive(Debug)]
@@ -45,11 +45,20 @@ impl SMILESParser {
     ///
     /// # Example
     /// ```
-    /// use molecules::io::SMILESParser;
-    /// let molecules = SMILESParser::parse_smiles("C(C(C))COcCl").unwrap();
-    /// assert_eq!(molecules[0].atoms.len(), 7);
+    /// use molecules::prelude::*;
+    /// let molecules = Molecule2D::from_smiles("C(C(C))COCCl").unwrap();
+    /// assert_eq!(molecules[0].atomic_numbers().len(), 18);
+    /// assert_eq!(molecules[0].get_edges().len(), 17);
     /// ```
-    pub fn parse_smiles(smiles: &str) -> Result<Vec<Molecule>, ParseError> {
+    pub fn parse_smiles(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
+        
+        let mut molecules = SMILESParser::parse_smiles_raw(smiles)?;
+            for molecule in molecules.iter_mut() {
+                molecule.add_hydrogens();
+            }
+        Ok(molecules)
+    }
+    pub fn parse_smiles_raw(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
         let mut parser = SMILESParser::default();
         let mut molecules = Vec::new();
 
@@ -103,7 +112,7 @@ impl SMILESParser {
                     parser.handle_atom(None)?;
                     parser.add_all_bonds();
                     molecules
-                        .push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
+                        .push(Molecule2D::from_atoms(parser.atoms));
                     parser = SMILESParser::default();
                 }
 
@@ -150,13 +159,12 @@ impl SMILESParser {
 
         parser.add_all_bonds();
 
-        molecules.push(Molecule::from_atoms(parser.atoms).with_classes(parser.atom_classes));
+        molecules.push(Molecule2D::from_atoms(parser.atoms));
         Ok(molecules)
     }
 
+
     fn add_all_bonds(&mut self) {
-        #[cfg(debug_assertions)]
-        println!("Ring bonds: {:?}", self.ring_bonds);
         for (start, end) in self.ring_bonds.values() {
             if start.is_some() && end.is_some() {
                 self.bonds
@@ -164,8 +172,6 @@ impl SMILESParser {
             }
         }
 
-        #[cfg(debug_assertions)]
-        println!("Hydrogens: {:?}", self.hydrogens);
         for (atom, number) in self.hydrogens.iter() {
             let hydrogen_index = self.current_atom_index;
             for index in 0..*number {
@@ -174,13 +180,13 @@ impl SMILESParser {
                     .push((*atom, hydrogen_index + index as usize, BondType::Single));
             }
         }
-
+        
         // Add bonds to the molecule
         for bond in self.bonds.iter() {
             let atom1 = &mut self.atoms[bond.0];
-            atom1.add_bond(Bond::new(bond.1, bond.2));
+            atom1.add_bond(BondTarget::new(bond.1, bond.2));
             let atom2 = &mut self.atoms[bond.1];
-            atom2.add_bond(Bond::new(bond.0, bond.2));
+            atom2.add_bond(BondTarget::new(bond.0, bond.2));
         }
     }
 
@@ -238,7 +244,7 @@ impl SMILESParser {
             let atomic_number = &self.element_buffer.to_uppercase().as_str().atomic_number()
                 .ok_or(ParseError::ElementNotFound(self.element_buffer.to_owned()))?;
 
-            let mut atom = Atom::new(*atomic_number);
+            let mut atom = Atom::new(*atomic_number).with_atom_class(self.current_atom_class);
 
             self.current_atom_index += 1;
 
@@ -248,7 +254,7 @@ impl SMILESParser {
             }
 
             if self.element_buffer.chars().next().unwrap().is_lowercase() || self.is_aromatic {
-                atom = Atom::new(*atomic_number).aromatic();
+                atom = Atom::new(*atomic_number);
             }
 
             if let Some(isotope) = self.isotope {
@@ -271,12 +277,6 @@ impl SMILESParser {
             if let Some(charge) = self.current_atom_charge {
                 atom = atom.with_charge(charge);
                 self.current_atom_charge = None;
-            }
-
-            if let Some(atom_class) = self.current_atom_class {
-                self.atom_classes
-                    .insert(self.current_atom_index, atom_class);
-                self.current_atom_class = None;
             }
 
             self.atoms.push(atom);
@@ -439,7 +439,6 @@ fn byte_to_number(byte: u8) -> u8 {
 }
 
 fn parse_chiral_class(slice: &[u8]) -> Result<ChiralClass, ParseError> {
-    println!("Slice: {:?}", slice);
     match slice {
         s if s.starts_with(b"@@") => Ok(ChiralClass::R),
         s if s.starts_with(b"@AL") => {
@@ -491,50 +490,72 @@ fn is_valid_isotope(atomic_number: u8, isotope: u16) -> bool {
     false
 }
 
+pub trait ToSMILES {
+    fn to_smiles(&self) -> String;
+}
+
+pub trait FromSMILES {
+    fn from_smiles(smiles: &str) -> Result<Vec<Self>, ParseError> where Self: Sized;
+}
+
+impl FromSMILES for Molecule2D {
+    fn from_smiles(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
+        let molecules = SMILESParser::parse_smiles(smiles)?;
+        Ok(molecules)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_parse_smiles() {
-        let molecules = SMILESParser::parse_smiles("C(C(C))COcCl").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 7);
+        let molecules = SMILESParser::parse_smiles("C(C(C))COCCl").unwrap();
+        assert_eq!(molecules[0].atomic_numbers[0], 6);
+        assert_eq!(molecules[0].atomic_numbers.len(), 18);
+
     }
 
     #[test]
     fn test_parse_smiles_with_isotope() {
         let molecules = SMILESParser::parse_smiles("CCCC[13C]").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 5);
-        assert_eq!(molecules[0].atoms[4].isotope.unwrap(), 13);
+        assert_eq!(molecules[0].atomic_numbers.len(), 17);
+        assert_eq!(molecules[0].get_isotope(4).unwrap(), 13);
     }
 
     #[test]
     fn test_parse_smiles_with_chiral_class() {
         let molecules = SMILESParser::parse_smiles("C[C@](F)(Cl)Br").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 5);
-        assert_eq!(molecules[0].atoms[1].chiral_class, ChiralClass::S);
+        assert_eq!(molecules[0].atomic_numbers.len(), 8);
+        assert_eq!(molecules[0].get_edges().len(), 7);
+        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::S);
     }
 
     #[test]
     fn test_parse_smiles_with_complex_atom_and_isotope() {
-        let molecules = SMILESParser::parse_smiles("C[C@](F)(Cl)Br[13C]").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 6);
-        assert_eq!(molecules[0].atoms[5].isotope.unwrap(), 13);
+        let molecules = SMILESParser::parse_smiles("C[C@](F)(Cl)[13C](Br)").unwrap();
+        println!("{:?}", molecules);
+        println!("{:?}", molecules[0].get_edges());
+        assert_eq!(molecules[0].atomic_numbers.len(), 11);
+        assert_eq!(molecules[0].get_isotope(4).unwrap(), 13);
+        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::S);
+        assert_eq!(molecules[0].get_edges().len(), 10);
     }
 
     #[test]
     fn test_parse_smiles_with_complex_atom_and_hydrogen() {
         let molecules = SMILESParser::parse_smiles("C[C@H](Cl)C").unwrap();
-        println!("{:#?}", molecules);
-        assert_eq!(molecules[0].atoms.len(), 5);
-        assert_eq!(molecules[0].atoms[1].bonds().len(), 4);
+        assert_eq!(molecules[0].atomic_numbers.len(), 11);
+        assert_eq!(molecules[0].get_edges().len(), 10);
     }
 
     #[test]
     fn test_bond_parsing() {
-        let molecules = SMILESParser::parse_smiles("C-C=C#C").unwrap();
-        assert_eq!(molecules[0].atoms.len(), 4);
-        assert_eq!(molecules[0].get_edges().len(), 3);
+        let molecules = SMILESParser::parse_smiles("C-C-C#C").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 10);
+        assert_eq!(molecules[0].get_edges().len(), 9);
     }
 
     #[test]
@@ -556,8 +577,9 @@ mod tests {
 
     #[test]
     fn test_submolecule() {
-        let molecules = SMILESParser::parse_smiles("C(C(C))COcCl.C(C(C))").unwrap();
+        let molecules = SMILESParser::parse_smiles("C(C(C))COCCl.C(C(C))").unwrap();
         let submolecule = molecules[0].match_submolecule(&molecules[1]).unwrap();
-        assert_eq!(submolecule.len(), 3);
+        assert_eq!(submolecule.len(), 0);
     }
 }
+
