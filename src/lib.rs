@@ -1,3 +1,4 @@
+pub mod atom;
 pub mod consts;
 pub mod graphs;
 pub mod io;

@@ -1,5 +1,6 @@
 pub use chemistry_consts::ElementProperties; 
-pub use crate::molecule::{Atom, BondTarget, BondType, ChiralClass, Molecule2D, Molecule};
+pub use crate::molecule::{BondTarget, BondType, ChiralClass, Molecule2D, Molecule};
+use crate::atom::Atom;
 pub use nohash_hasher::IntMap;
 
 #[derive(Debug)]
@@ -26,7 +27,6 @@ pub struct SMILESParser {
     isotope: Option<u16>,
     chiral_class: ChiralClass,
     current_atom_class: Option<u8>,
-    atom_classes: IntMap<usize, u8>,
     last_bond_type: BondType,
     ring_number: Option<usize>,
     ring_bonds: IntMap<usize, (Option<usize>, Option<usize>)>,
