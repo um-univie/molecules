@@ -379,6 +379,9 @@ pub trait Molecule {
     fn add_hydrogens(&mut self);
     fn from_atoms(atoms: Vec<Atom>) -> Self;
 
+    fn len(&self) -> usize {
+        self.atomic_numbers().len()
+    }
     fn get_atomic_number(&self, atom_index: usize) -> u8 {
         self.atomic_numbers()[atom_index]
     }
