@@ -90,12 +90,9 @@ impl MolecularFormula {
     /// assert_eq!(water.molecular_mass().unwrap().round(), 18.0);
     /// assert_eq!(methane.molecular_mass().unwrap().round(), 16.0);
     pub fn molecular_mass(&self) -> Option<f64> {
-        self
-            .elements
-            .iter()
-            .try_fold(0.0, |acc, (atom, count)| {
-                let standard_atomic_weight = atom.standard_atomic_weight()?;
-                Some(acc + standard_atomic_weight * *count as f64)
+        self.elements.iter().try_fold(0.0, |acc, (atom, count)| {
+            let standard_atomic_weight = atom.standard_atomic_weight()?;
+            Some(acc + standard_atomic_weight * *count as f64)
         })
     }
     //This is commented out due to a saftey issue with the fft crate
@@ -249,8 +246,8 @@ impl Display for MolecularFormula {
             .elements
             .iter()
             .map(|(&atom, &count)| (atom.atomic_symbol().unwrap().into(), count))
-            .collect::<Vec<(String,usize)>>();
-        elements.sort_by(|(atom1, _),(atom2, _)| atom1.cmp(atom2));
+            .collect::<Vec<(String, usize)>>();
+        elements.sort_by(|(atom1, _), (atom2, _)| atom1.cmp(atom2));
         for (atom, count) in elements {
             write!(f, "{}{}", atom, count)?;
         }
@@ -302,7 +299,10 @@ impl FromStr for MolecularFormula {
         s.chars().for_each(|c| {
             if c.is_alphabetic() {
                 if !element_buffer.is_empty() && c.is_uppercase() {
-                    let atomic_number = element_buffer.as_str().atomic_number().expect("Invalid element");
+                    let atomic_number = element_buffer
+                        .as_str()
+                        .atomic_number()
+                        .expect("Invalid element");
                     let count = if !number_buffer.is_empty() {
                         number_buffer.parse::<usize>().unwrap_or(1)
                     } else {
@@ -318,7 +318,10 @@ impl FromStr for MolecularFormula {
             }
         });
         if !element_buffer.is_empty() {
-            let atomic_number = element_buffer.as_str().atomic_number().expect("Invalid element");
+            let atomic_number = element_buffer
+                .as_str()
+                .atomic_number()
+                .expect("Invalid element");
             let count = if !number_buffer.is_empty() {
                 number_buffer.parse::<usize>().unwrap_or(1)
             } else {

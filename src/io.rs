@@ -1,6 +1,6 @@
-pub use chemistry_consts::ElementProperties; 
-pub use crate::molecule::{BondTarget, BondType, ChiralClass, Molecule2D, Molecule};
 use crate::atom::Atom;
+pub use crate::molecule::{BondTarget, BondType, ChiralClass, Molecule, Molecule2D};
+pub use chemistry_consts::ElementProperties;
 pub use nohash_hasher::IntMap;
 
 #[derive(Debug)]
@@ -51,11 +51,10 @@ impl SMILESParser {
     /// assert_eq!(molecules[0].get_edges().len(), 17);
     /// ```
     pub fn parse_smiles(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
-        
         let mut molecules = SMILESParser::parse_smiles_raw(smiles)?;
-            for molecule in molecules.iter_mut() {
-                molecule.add_hydrogens();
-            }
+        for molecule in molecules.iter_mut() {
+            molecule.add_hydrogens();
+        }
         Ok(molecules)
     }
     pub fn parse_smiles_raw(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
@@ -111,8 +110,7 @@ impl SMILESParser {
                 b'.' => {
                     parser.handle_atom(None)?;
                     parser.add_all_bonds();
-                    molecules
-                        .push(Molecule2D::from_atoms(parser.atoms));
+                    molecules.push(Molecule2D::from_atoms(parser.atoms));
                     parser = SMILESParser::default();
                 }
 
@@ -163,7 +161,6 @@ impl SMILESParser {
         Ok(molecules)
     }
 
-
     fn add_all_bonds(&mut self) {
         for (start, end) in self.ring_bonds.values() {
             if start.is_some() && end.is_some() {
@@ -180,7 +177,7 @@ impl SMILESParser {
                     .push((*atom, hydrogen_index + index as usize, BondType::Single));
             }
         }
-        
+
         // Add bonds to the molecule
         for bond in self.bonds.iter() {
             let atom1 = &mut self.atoms[bond.0];
@@ -241,7 +238,11 @@ impl SMILESParser {
 
     fn handle_atom(&mut self, byte: Option<u8>) -> Result<(), ParseError> {
         if !self.element_buffer.is_empty() {
-            let atomic_number = &self.element_buffer.to_uppercase().as_str().atomic_number()
+            let atomic_number = &self
+                .element_buffer
+                .to_uppercase()
+                .as_str()
+                .atomic_number()
                 .ok_or(ParseError::ElementNotFound(self.element_buffer.to_owned()))?;
 
             let mut atom = Atom::new(*atomic_number).with_atom_class(self.current_atom_class);
@@ -495,7 +496,9 @@ pub trait ToSMILES {
 }
 
 pub trait FromSMILES {
-    fn from_smiles(smiles: &str) -> Result<Vec<Self>, ParseError> where Self: Sized;
+    fn from_smiles(smiles: &str) -> Result<Vec<Self>, ParseError>
+    where
+        Self: Sized;
 }
 
 impl FromSMILES for Molecule2D {
@@ -504,7 +507,6 @@ impl FromSMILES for Molecule2D {
         Ok(molecules)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -515,7 +517,6 @@ mod tests {
         let molecules = SMILESParser::parse_smiles("C(C(C))COCCl").unwrap();
         assert_eq!(molecules[0].atomic_numbers[0], 6);
         assert_eq!(molecules[0].atomic_numbers.len(), 18);
-
     }
 
     #[test]
@@ -582,4 +583,3 @@ mod tests {
         assert_eq!(submolecule.len(), 0);
     }
 }
-

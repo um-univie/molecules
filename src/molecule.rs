@@ -1,7 +1,7 @@
-use chemistry_consts::ElementProperties;
+use crate::atom::Atom;
 use crate::consts::{BOND_SEARCH_THRESHOLD, BOND_TOLERANCE};
 use crate::vector::Vector;
-use crate::atom::Atom;
+use chemistry_consts::ElementProperties;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
 use kiddo::{KdTree, SquaredEuclidean};
@@ -115,7 +115,7 @@ pub struct Molecule2D {
     pub isotopes: Option<Vec<u16>>,
     pub is_radical: Vec<bool>,
     atom_bonds: Vec<Vec<BondTarget>>,
-}  
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct Molecule3D {
@@ -159,7 +159,7 @@ pub trait Molecule {
             let size = self.atomic_numbers().len();
             let mut classes = vec![0; size];
             classes[atom_index] = class;
-            *self.atom_classes_mut() = Some(classes);        
+            *self.atom_classes_mut() = Some(classes);
         }
     }
 
@@ -186,10 +186,14 @@ pub trait Molecule {
             })
             .sum::<i8>()
             / 2
-            + if self.is_atom_radical(atom_index) { 1 } else { 0 }
+            + if self.is_atom_radical(atom_index) {
+                1
+            } else {
+                0
+            }
             + self.get_atom_charge(atom_index).abs()
     }
-    fn degree(&self, atom_index:usize) -> Option<i8> {
+    fn degree(&self, atom_index: usize) -> Option<i8> {
         let atomic_number = self.atomic_numbers()[atom_index];
         let expected_valency = atomic_number.valencies()?.next()?;
         let actual_valency = self.actual_valency(atom_index);
@@ -222,13 +226,14 @@ pub trait Molecule {
         &mut self.charges_mut()[atom_index]
     }
     fn get_isotope(&self, atom_index: usize) -> Option<u16> {
-        self.isotopes().and_then(|isotopes| isotopes.get(atom_index).copied())
+        self.isotopes()
+            .and_then(|isotopes| isotopes.get(atom_index).copied())
     }
     fn get_chiral_class(&self, atom_index: usize) -> ChiralClass {
         self.chiral_classes()
             .and_then(|chirals| chirals.get(atom_index).copied())
             .unwrap_or(ChiralClass::None)
-    } 
+    }
     fn is_atom_radical(&self, atom_index: usize) -> bool;
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool);
     fn set_atom_charge(&mut self, atom_index: usize, charge: i8) {
@@ -240,20 +245,20 @@ pub trait Molecule {
     }
 
     fn get_edges(&self) -> Vec<(usize, usize)> {
-    self.atom_bonds()
-        .iter()
-        .enumerate()
-        .flat_map(|(atom_index, bonds)| {
-            bonds.iter().filter_map(move |bond| {
-                if atom_index < bond.target() {
-                    Some((atom_index, bond.target()))
-                } else {
-                    None
-                }
+        self.atom_bonds()
+            .iter()
+            .enumerate()
+            .flat_map(|(atom_index, bonds)| {
+                bonds.iter().filter_map(move |bond| {
+                    if atom_index < bond.target() {
+                        Some((atom_index, bond.target()))
+                    } else {
+                        None
+                    }
+                })
             })
-        })
-        .collect()
-}
+            .collect()
+    }
     fn get_edges_with_type(&self) -> Vec<(usize, usize, BondType)> {
         self.atom_bonds()
             .iter()
@@ -320,38 +325,40 @@ pub trait Molecule {
         println!("{self_components:?}");
         println!("{other_components:?}");
 
-
         self_components.retain(|component| component.len() > 1);
         other_components.retain(|component| component.len() > 1);
 
         for self_component in &mut self_components {
-        let graph1 = self.to_ungraph_from_slice(self_component);
-        let g_ref = &graph1;
-        for other_component in &mut other_components {
-            let graph2 = other.to_ungraph_from_slice(other_component);
+            let graph1 = self.to_ungraph_from_slice(self_component);
+            let g_ref = &graph1;
+            for other_component in &mut other_components {
+                let graph2 = other.to_ungraph_from_slice(other_component);
 
-            let h_ref = &graph2;
+                let h_ref = &graph2;
 
-            if let Some(mappings) = subgraph_isomorphisms_iter(
-                &h_ref,
-                &g_ref,
-                &mut |node1, node2| node1 == node2,
-                &mut |edge1, edge2| edge1 == edge2,
-            ) {
-                let mapping = 
-                    mappings.map(|mapping| {
+                if let Some(mappings) = subgraph_isomorphisms_iter(
+                    &h_ref,
+                    &g_ref,
+                    &mut |node1, node2| node1 == node2,
+                    &mut |edge1, edge2| edge1 == edge2,
+                ) {
+                    let mapping = mappings
+                        .map(|mapping| {
                             mapping
                                 .into_iter()
                                 .zip(other_component.iter())
-                                .map(|(index,&other_component_index)| (self_component[index], other_component_index))
+                                .map(|(index, &other_component_index)| {
+                                    (self_component[index], other_component_index)
+                                })
                                 .collect::<IntMap<usize, usize>>()
-                        }).collect::<Vec<IntMap<usize, usize>>>();
-                return Some(mapping);
-            };
+                        })
+                        .collect::<Vec<IntMap<usize, usize>>>();
+                    return Some(mapping);
+                };
+            }
         }
+        None
     }
-    None
- }
     fn get_components(&self) -> Vec<Vec<usize>> {
         let mut connected_components = vec![];
         let mut visited_atoms = vec![false; self.atomic_numbers().len()];
@@ -389,7 +396,6 @@ pub trait Molecule {
         }
         current_component
     }
-
 
     fn build_smiles_tree(
         &self,
@@ -441,8 +447,6 @@ pub trait Molecule {
         root
     }
 
-
-    
     fn molecular_formula(&self) -> MolecularFormula {
         MolecularFormula::from_molecule(self)
     }
@@ -487,28 +491,20 @@ pub trait Molecule {
         let charge = self.charges()[node.index];
         let number_of_hydrogens = self.number_of_bonded_element(node.index, 1);
 
-        let hydrogen_str = match number_of_hydrogens { 
+        let hydrogen_str = match number_of_hydrogens {
             0 => String::new(),
             1 => "H".to_string(),
             _ => format!("H{}", number_of_hydrogens),
         };
 
         // TODO: Introduce error handling here
-        let Some(atomic_symbol) = self.atomic_numbers()[node.index].atomic_symbol() else {return "".to_string() };
+        let Some(atomic_symbol) = self.atomic_numbers()[node.index].atomic_symbol() else {
+            return "".to_string();
+        };
 
         let charge_string = match charge {
-            2.. => format!(
-                "[{}{}+{}]",
-                atomic_symbol,
-                hydrogen_str,
-                charge.abs()
-            ),
-            ..=-2 => format!(
-                "[{}{}-{}]",
-                atomic_symbol,
-                hydrogen_str,
-                charge.abs()
-            ),
+            2.. => format!("[{}{}+{}]", atomic_symbol, hydrogen_str, charge.abs()),
+            ..=-2 => format!("[{}{}-{}]", atomic_symbol, hydrogen_str, charge.abs()),
             1 => format!("[{}{}+1]", atomic_symbol, hydrogen_str),
             -1 => format!("[{}{}-1]", atomic_symbol, hydrogen_str),
             0 => {
@@ -526,7 +522,7 @@ pub trait Molecule {
                 if closure.1 == BondType::Single {
                     smiles.push_str(&format!("{}", closure.0));
                 } else {
-                   smiles.push_str(&format!("{}{}", closure.1, closure.0));
+                    smiles.push_str(&format!("{}{}", closure.1, closure.0));
                 }
             }
         }
@@ -542,7 +538,6 @@ pub trait Molecule {
         }
         smiles
     }
-
 }
 
 impl Molecule for Molecule3D {
@@ -560,7 +555,7 @@ impl Molecule for Molecule3D {
     }
     fn charges(&self) -> &[i8] {
         &self.charges
-    } 
+    }
     fn charges_mut(&mut self) -> &mut Vec<i8> {
         &mut self.charges
     }
@@ -569,7 +564,7 @@ impl Molecule for Molecule3D {
     }
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8> {
         &mut self.atomic_numbers
-    } 
+    }
     fn chiral_classes(&self) -> Option<&Vec<ChiralClass>> {
         self.chiral_classes.as_ref()
     }
@@ -593,11 +588,11 @@ impl Molecule for Molecule3D {
         let degrees = self.degrees();
         degrees.iter().enumerate().for_each(|(index, &degree)| {
             let number_of_hydrogens = -degree;
-                for _ in 0..number_of_hydrogens {
-                    self.atomic_numbers.push(1);
-                    self.atom_bonds.push(Vec::from([BondTarget::single(index)]));
-                    self.atom_bonds[index].push(BondTarget::single(self.atomic_numbers.len() - 1));
-                }
+            for _ in 0..number_of_hydrogens {
+                self.atomic_numbers.push(1);
+                self.atom_bonds.push(Vec::from([BondTarget::single(index)]));
+                self.atom_bonds[index].push(BondTarget::single(self.atomic_numbers.len() - 1));
+            }
         });
     }
     fn from_atoms(atoms: Vec<Atom>) -> Self {
@@ -606,24 +601,38 @@ impl Molecule for Molecule3D {
         let is_radical = atoms.iter().map(|atom| atom.is_radical).collect();
         let mut isotopes = None;
         if atoms.iter().any(|atom| atom.isotope.is_some()) {
-            isotopes = Some(atoms
-                .iter()
-                .map(|atom| if atom.isotope.is_some() {
-                    atom.isotope().unwrap()
-                } else {
-                        atom.atomic_number().isotopes().unwrap().next().unwrap().mass.round() as u16
-                }).collect());
+            isotopes = Some(
+                atoms
+                    .iter()
+                    .map(|atom| {
+                        if atom.isotope.is_some() {
+                            atom.isotope().unwrap()
+                        } else {
+                            atom.atomic_number()
+                                .isotopes()
+                                .unwrap()
+                                .next()
+                                .unwrap()
+                                .mass
+                                .round() as u16
+                        }
+                    })
+                    .collect(),
+            );
         }
         let atom_bonds = atoms.iter().map(|atom| atom.bonds().clone()).collect();
-        let positions = atoms.iter().map(|atom| atom.position_vector.unwrap_or_default()).collect();
+        let positions = atoms
+            .iter()
+            .map(|atom| atom.position_vector.unwrap_or_default())
+            .collect();
         let mut chirals = None;
-        if atoms.iter().any(|atom| atom.chiral_class != ChiralClass::None) {
-            chirals = Some(atoms
-                .into_iter()
-                .map(|atom| atom.chiral_class).collect());
+        if atoms
+            .iter()
+            .any(|atom| atom.chiral_class != ChiralClass::None)
+        {
+            chirals = Some(atoms.into_iter().map(|atom| atom.chiral_class).collect());
         }
-        let mut molecule =
-        Molecule3D {
+        let mut molecule = Molecule3D {
             atomic_numbers,
             charges,
             is_radical,
@@ -636,7 +645,6 @@ impl Molecule for Molecule3D {
         molecule.identify_bonds(BOND_SEARCH_THRESHOLD);
         molecule
     }
-
 }
 
 impl Molecule for Molecule2D {
@@ -664,7 +672,7 @@ impl Molecule for Molecule2D {
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8> {
         &mut self.atomic_numbers
     }
-    fn chiral_classes(&self) -> Option<&Vec<ChiralClass>> { 
+    fn chiral_classes(&self) -> Option<&Vec<ChiralClass>> {
         self.chiral_classes.as_ref()
     }
     fn chiral_classes_mut(&mut self) -> &mut Vec<ChiralClass> {
@@ -686,12 +694,13 @@ impl Molecule for Molecule2D {
         let degrees = self.degrees();
         degrees.iter().enumerate().for_each(|(index, &degree)| {
             let number_of_hydrogens = -degree;
-                for _ in 0..number_of_hydrogens {
-                    let hydrogen_index = self.atomic_numbers.len();
-                    self.atomic_numbers_mut().push(1);
-                    self.atom_bonds_mut().push(Vec::from([BondTarget::single(index)]));
-                    self.atom_bonds_mut()[index].push(BondTarget::single(hydrogen_index));
-                }
+            for _ in 0..number_of_hydrogens {
+                let hydrogen_index = self.atomic_numbers.len();
+                self.atomic_numbers_mut().push(1);
+                self.atom_bonds_mut()
+                    .push(Vec::from([BondTarget::single(index)]));
+                self.atom_bonds_mut()[index].push(BondTarget::single(hydrogen_index));
+            }
         });
     }
 
@@ -704,25 +713,40 @@ impl Molecule for Molecule2D {
         let mut isotopes = None;
         let mut atom_classes = None;
         let mut chiral_classes = None;
-        
+
         if atoms.iter().any(|atom| atom.isotope.is_some()) {
-            isotopes = Some(atoms
-                .iter()
-                .map(|atom| if atom.isotope.is_some() {
-                    atom.isotope.unwrap()
-                } else {
-                        atom.atomic_number.isotopes().unwrap().next().unwrap().mass.round() as u16
-                }).collect());
+            isotopes = Some(
+                atoms
+                    .iter()
+                    .map(|atom| {
+                        if atom.isotope.is_some() {
+                            atom.isotope.unwrap()
+                        } else {
+                            atom.atomic_number
+                                .isotopes()
+                                .unwrap()
+                                .next()
+                                .unwrap()
+                                .mass
+                                .round() as u16
+                        }
+                    })
+                    .collect(),
+            );
         }
         if atoms.iter().any(|atom| atom.atom_class.is_some()) {
-            atom_classes = Some(atoms
-                .iter()
-                .map(|atom| atom.atom_class.unwrap_or(0)).collect());
+            atom_classes = Some(
+                atoms
+                    .iter()
+                    .map(|atom| atom.atom_class.unwrap_or(0))
+                    .collect(),
+            );
         }
-        if atoms.iter().any(|atom| atom.chiral_class != ChiralClass::None) {
-            chiral_classes = Some(atoms
-                .into_iter()
-                .map(|atom| atom.chiral_class).collect());
+        if atoms
+            .iter()
+            .any(|atom| atom.chiral_class != ChiralClass::None)
+        {
+            chiral_classes = Some(atoms.into_iter().map(|atom| atom.chiral_class).collect());
         }
 
         Molecule2D {
@@ -736,7 +760,6 @@ impl Molecule for Molecule2D {
             ..Default::default()
         }
     }
-     
 }
 
 pub struct MolecularSystem {
@@ -850,33 +873,27 @@ impl MolecularSystem {
     // }
 }
 
-
 impl Molecule3D {
-    
-
     pub fn atom_bonds_mut(&mut self, atom_index: usize) -> &mut Vec<BondTarget> {
         &mut self.atom_bonds[atom_index]
     }
 
     pub fn class_of_atom(&self, atom_index: usize) -> u8 {
-        if let Some(classes) =  self.atom_classes() {
-            *classes
-            .get(atom_index)
-            .unwrap_or(&0)    
+        if let Some(classes) = self.atom_classes() {
+            *classes.get(atom_index).unwrap_or(&0)
         } else {
             0
         }
     }
 
-
-
     pub fn get_charge(&self, atom_index: usize) -> i8 {
         self.charges.get(atom_index).copied().unwrap_or(0)
     }
-    
-    pub fn get_isotope(&self, atom_index: usize) -> Option<u16> {
 
-        let Some(isotopes) = &self.isotopes else { return None; };
+    pub fn get_isotope(&self, atom_index: usize) -> Option<u16> {
+        let Some(isotopes) = &self.isotopes else {
+            return None;
+        };
         isotopes.get(atom_index).copied()
     }
 
@@ -898,7 +915,6 @@ impl Molecule3D {
     pub fn add_atom(&mut self, atom: Atom) {
         self.atomic_numbers.push(atom.atomic_number);
     }
-
 
     // This function returns a reference to outgoing bonds of an atom
     pub fn atom_bonds(&self) -> &Vec<Vec<BondTarget>> {
@@ -987,12 +1003,10 @@ impl Molecule3D {
         self.electronegativity(atom1_index)
             .cmp(&self.electronegativity(atom2_index))
     }
-    
+
     pub fn electronegativity(&self, atom_index: usize) -> Option<u16> {
         self.atomic_numbers.get(atom_index)?.electronegativity()
     }
-
-
 
     pub fn identify_bond_changes(&self, other: &Self) -> Vec<BondChange> {
         let mut bond_changes: Vec<BondChange> = Vec::new();
@@ -1036,12 +1050,12 @@ impl Molecule3D {
             .zip(&other.charges)
             .enumerate()
             .filter_map(|(index, (&charge1, &charge2))| {
-            if charge1 != charge2 {
-                Some((index, charge1, charge2))
-            } else {
-                None
-            }
-        })
+                if charge1 != charge2 {
+                    Some((index, charge1, charge2))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -1053,7 +1067,7 @@ impl Molecule3D {
     pub fn identify_difference(&self, other: &Molecule3D) {
         let _charge_changes = self.charge_changes(other);
         let _bond_changes = self.identify_bond_changes(other);
-        let _bond_type_changes = self.identify_bond_type_changes(other);   
+        let _bond_type_changes = self.identify_bond_type_changes(other);
     }
 
     fn identify_bond_type_changes(&self, other: &Molecule3D) -> Vec<BondTypeChange> {
@@ -1062,80 +1076,88 @@ impl Molecule3D {
             .zip(&other.atom_bonds)
             .enumerate()
             .flat_map(|(index, (self_bonds, other_bonds))| {
-            self_bonds
-                .iter()
-                .filter_map(|self_bond| {
-                    other_bonds
-                        .iter()
-                        .find(|other_bond| other_bond.target() == self_bond.target())
-                        .and_then(|other_bond| {
-                            if self_bond.bond_type() != other_bond.bond_type() {
-                                Some(BondTypeChange {
-                                    atom_index: index,
-                                    target: self_bond.target(),
-                                    from: self_bond.bond_type(),
-                                    to: other_bond.bond_type(),
-                                })
-                            } else {
-                                None
-                            }
-                        })
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect()
-}
+                self_bonds
+                    .iter()
+                    .filter_map(|self_bond| {
+                        other_bonds
+                            .iter()
+                            .find(|other_bond| other_bond.target() == self_bond.target())
+                            .and_then(|other_bond| {
+                                if self_bond.bond_type() != other_bond.bond_type() {
+                                    Some(BondTypeChange {
+                                        atom_index: index,
+                                        target: self_bond.target(),
+                                        from: self_bond.bond_type(),
+                                        to: other_bond.bond_type(),
+                                    })
+                                } else {
+                                    None
+                                }
+                            })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
     pub fn identify_bonds(&mut self, threshold: f64) {
-    let threshold_squared = threshold.powi(2);
-    let kdtree = self.build_tree();
-    let bonds = self
-        .positions
-        .par_iter()
-        .enumerate()
-        .map(|(index, position)| {
-            let mut bonds = kdtree
-                .within::<SquaredEuclidean>(
-                    &[position.x, position.y, position.z],
-                    threshold_squared,
-                )
-                .iter()
-                .filter_map(|neighbor| {
-                    if neighbor.item == index as u64 {
-                        return None;
-                    }
-                    let distance = neighbor.distance;
-                    let is_bonded = self.is_bonded(
-                        index,
-                        neighbor.item as usize,
-                        distance,
-                        BOND_TOLERANCE,
-                    );
-                    if is_bonded {
-                        Some(BondTarget::single(neighbor.item as usize))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<BondTarget>>();
-            bonds.sort_by_key(|bond| bond.target);
-            bonds
-        })
-        .collect::<Vec<Vec<BondTarget>>>();
-    self.atom_bonds = bonds;
-}
-        /// This function checks if two atoms are bonded based on their atomic numbers and distance
-    fn is_bonded(&self, index1: usize, index2: usize, squared_distance: f64, tolerance: f64) -> bool {
-        let Some(atomic_number1) = self.atomic_numbers.get(index1) else { return false; };
-        let Some(atomic_number2) = self.atomic_numbers.get(index2) else { return false; };
-        if let (Some(covalent_radius1), Some(covalent_radius2)) = (atomic_number1.covalent_radius(), atomic_number2.covalent_radius()) {
-            squared_distance
-            < ((covalent_radius1 + covalent_radius2) * tolerance).powi(2)
+        let threshold_squared = threshold.powi(2);
+        let kdtree = self.build_tree();
+        let bonds = self
+            .positions
+            .par_iter()
+            .enumerate()
+            .map(|(index, position)| {
+                let mut bonds = kdtree
+                    .within::<SquaredEuclidean>(
+                        &[position.x, position.y, position.z],
+                        threshold_squared,
+                    )
+                    .iter()
+                    .filter_map(|neighbor| {
+                        if neighbor.item == index as u64 {
+                            return None;
+                        }
+                        let distance = neighbor.distance;
+                        let is_bonded =
+                            self.is_bonded(index, neighbor.item as usize, distance, BOND_TOLERANCE);
+                        if is_bonded {
+                            Some(BondTarget::single(neighbor.item as usize))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<BondTarget>>();
+                bonds.sort_by_key(|bond| bond.target);
+                bonds
+            })
+            .collect::<Vec<Vec<BondTarget>>>();
+        self.atom_bonds = bonds;
+    }
+    /// This function checks if two atoms are bonded based on their atomic numbers and distance
+    fn is_bonded(
+        &self,
+        index1: usize,
+        index2: usize,
+        squared_distance: f64,
+        tolerance: f64,
+    ) -> bool {
+        let Some(atomic_number1) = self.atomic_numbers.get(index1) else {
+            return false;
+        };
+        let Some(atomic_number2) = self.atomic_numbers.get(index2) else {
+            return false;
+        };
+        if let (Some(covalent_radius1), Some(covalent_radius2)) = (
+            atomic_number1.covalent_radius(),
+            atomic_number2.covalent_radius(),
+        ) {
+            squared_distance < ((covalent_radius1 + covalent_radius2) * tolerance).powi(2)
         } else {
             false
         }
     }
 
-    pub fn charge(&self) -> i32 { 
+    pub fn charge(&self) -> i32 {
         if self.atomic_numbers.len() > 1000 {
             self.charges.par_iter().map(|&charge| charge as i32).sum()
         } else {
@@ -1182,7 +1204,8 @@ impl Molecule3D {
                     let position_vector2 = &self.positions[atom_index];
                     let position_vector3 = &self.positions[neighbor2_index];
 
-                    let angle = position_vector1.angle_between_points(position_vector2, position_vector3);
+                    let angle =
+                        position_vector1.angle_between_points(position_vector2, position_vector3);
                     local_bond_angles.push(BondAngle::new(
                         angle,
                         (neighbor1_index, atom_index, neighbor2_index),
@@ -1223,7 +1246,8 @@ impl Molecule3D {
                         if bond.target() != atom3 && bond.target() != atom2 && atom3 < bond.target()
                         {
                             let dihedral = (bond.target(), atom1, atom2, atom3);
-                            self.dihedral_angle(&dihedral).map(|dihedral_angle| (dihedral, dihedral_angle))
+                            self.dihedral_angle(&dihedral)
+                                .map(|dihedral_angle| (dihedral, dihedral_angle))
                         } else {
                             None
                         }
@@ -1247,29 +1271,32 @@ impl Molecule3D {
     /// assert_eq!(dihedral_angle, Some(0.5807210503904102));
     /// ```
     pub fn dihedral_angle(&self, dihedral: &(usize, usize, usize, usize)) -> Option<f64> {
-    if [dihedral.0, dihedral.1, dihedral.2, dihedral.3].iter().any(|&index| index >= self.positions.len()) {
-        return None;
-    }
-    let (a, b, c, d) = (
-        self.positions[dihedral.0],
-        self.positions[dihedral.1],
-        self.positions[dihedral.2],
-        self.positions[dihedral.3],
-    );
+        if [dihedral.0, dihedral.1, dihedral.2, dihedral.3]
+            .iter()
+            .any(|&index| index >= self.positions.len())
+        {
+            return None;
+        }
+        let (a, b, c, d) = (
+            self.positions[dihedral.0],
+            self.positions[dihedral.1],
+            self.positions[dihedral.2],
+            self.positions[dihedral.3],
+        );
 
-    let v3 = d - c;
-    let v2 = c - b;
-    let v1 = b - a;
-    let normal1 = v1.cross(&v2);
-    let normal2 = v2.cross(&v3);
-    let angle = normal1.angle_between(&normal2);
-    let sign = normal1.cross(&normal2).dot(&v2);
-    if sign < 0.0 {
-        Some(-angle)
-    } else {
-        Some(angle)
+        let v3 = d - c;
+        let v2 = c - b;
+        let v1 = b - a;
+        let normal1 = v1.cross(&v2);
+        let normal2 = v2.cross(&v3);
+        let angle = normal1.angle_between(&normal2);
+        let sign = normal1.cross(&normal2).dot(&v2);
+        if sign < 0.0 {
+            Some(-angle)
+        } else {
+            Some(angle)
+        }
     }
-}
     /// This function calculates the degrees of all atoms
     ///
     /// # Example
@@ -1285,7 +1312,7 @@ impl Molecule3D {
             .collect::<Vec<i8>>()
     }
 
-    pub fn degree(&self, atom_index:usize) -> Option<i8> {
+    pub fn degree(&self, atom_index: usize) -> Option<i8> {
         let atomic_number = self.atomic_numbers[atom_index];
         let expected_valency = atomic_number.valencies()?.next()?;
         let actual_valency = self.actual_valency(atom_index);
@@ -1316,10 +1343,10 @@ impl Molecule3D {
             + self.get_charge(atom_index).abs()
     }
     pub fn shift_charge(&mut self, index: usize, neighbor_index: usize, charge: i8) {
-        self.update_atom_charge(index,-charge);
+        self.update_atom_charge(index, -charge);
         self.update_atom_charge(neighbor_index, charge);
     }
-    
+
     pub fn update_charge(&mut self, charge: i8) {
         self.charge += charge as i32;
     }
@@ -1386,11 +1413,20 @@ impl Molecule3D {
 
         let mut molecules = Vec::with_capacity(components.len());
         for component in components {
-            let atomic_numbers: Vec<u8> = component.iter().map(|&index| self.atomic_numbers[index]).collect(); 
+            let atomic_numbers: Vec<u8> = component
+                .iter()
+                .map(|&index| self.atomic_numbers[index])
+                .collect();
             let mut new_bonds = Vec::with_capacity(component.len());
-            let new_positions = component.iter().map(|&index| self.positions[index]).collect();
+            let new_positions = component
+                .iter()
+                .map(|&index| self.positions[index])
+                .collect();
             let new_charges = component.iter().map(|&index| self.charges[index]).collect();
-            let new_is_radical = component.iter().map(|&index| self.is_radical[index]).collect();
+            let new_is_radical = component
+                .iter()
+                .map(|&index| self.is_radical[index])
+                .collect();
 
             // TODO: Properly implement thi
             for &index in component.iter() {
@@ -1419,8 +1455,7 @@ impl Molecule3D {
         }
         molecules
     }
-
-    }
+}
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct MolecularFormula {
@@ -1524,7 +1559,7 @@ impl Display for MolecularFormula {
             .iter()
             .map(|(&atom, &count)| (atom.atomic_symbol().unwrap().to_string(), count))
             .collect::<Vec<_>>();
-        elements.sort_by(|(atom1, _),(atom2, _)| atom1.cmp(atom2));
+        elements.sort_by(|(atom1, _), (atom2, _)| atom1.cmp(atom2));
         for (atom, count) in elements {
             write!(f, "{}{}", atom.clone(), count)?;
         }
@@ -1724,8 +1759,7 @@ fn backtrack_bonding(molecule: &mut Molecule3D, degrees: &mut [i8]) -> bool {
     // Find the first unsatisfied atom (negative degree)
     let mut unsatisfied_atom_index = degrees.iter().position(|&degree| degree < 0).unwrap();
 
-    let number_of_double_bonds = molecule
-        .atom_bonds[unsatisfied_atom_index]
+    let number_of_double_bonds = molecule.atom_bonds[unsatisfied_atom_index]
         .iter()
         .filter(|&bond| bond.bond_type == BondType::Double)
         .count();
@@ -1802,7 +1836,7 @@ pub fn increase_bonds(molecule: &mut Molecule3D, atom_index: usize, neighbor_ind
             increase_bond(bond);
         }
     }
-    for bond in &mut molecule.atom_bonds[neighbor_index]{
+    for bond in &mut molecule.atom_bonds[neighbor_index] {
         if bond.target == atom_index {
             increase_bond(bond);
         }
@@ -1880,8 +1914,11 @@ pub fn extract_atom_pdb(line: &str) -> Result<Atom, ParseFloatError> {
         z: line[46..=53].trim().parse::<f64>()?,
     };
     let name = line[76..=77].trim().to_string();
-    let atomic_number = name.as_str().atomic_number().unwrap_or_else(|| panic!("Could not find atom with symbol {}", name));
-Ok(Atom {
+    let atomic_number = name
+        .as_str()
+        .atomic_number()
+        .unwrap_or_else(|| panic!("Could not find atom with symbol {}", name));
+    Ok(Atom {
         position_vector: Some(position),
         atomic_number,
         ..Default::default()
@@ -1910,7 +1947,9 @@ Ok(Atom {
 /// ```
 pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
     let fields: Vec<&str> = line.split_whitespace().collect();
-    let atomic_number = fields[2].atomic_number().unwrap_or_else(|| panic!("Could not find atom with symbol {}", fields[2]));
+    let atomic_number = fields[2]
+        .atomic_number()
+        .unwrap_or_else(|| panic!("Could not find atom with symbol {}", fields[2]));
 
     let position = Vector {
         x: fields[10].parse::<f64>()?,
@@ -1923,7 +1962,6 @@ pub fn extract_atom_cif(line: &str) -> Result<Atom, ParseFloatError> {
         ..Default::default()
     })
 }
-
 
 impl Molecule3D {
     /// Finds the shortest path of a set of atoms
@@ -2115,7 +2153,10 @@ impl Molecule3D {
     }
 
     pub fn names(&self) -> Vec<&str> {
-        self.atomic_numbers.iter().map(|atom| atom.atomic_symbol().unwrap()).collect()
+        self.atomic_numbers
+            .iter()
+            .map(|atom| atom.atomic_symbol().unwrap())
+            .collect()
     }
 
     pub fn morgans_algorithm(&self, max_depth: Option<usize>) -> Vec<usize> {
@@ -2137,10 +2178,7 @@ impl Molecule3D {
             }
 
             for (index, bonds) in self.atom_bonds.iter().enumerate() {
-                let sum = bonds
-                    .iter()
-                    .map(|bond| vertex_degrees[bond.target()])
-                    .sum();
+                let sum = bonds.iter().map(|bond| vertex_degrees[bond.target()]).sum();
                 buffer[index] = sum;
             }
             for (index, degree) in buffer.iter().enumerate() {

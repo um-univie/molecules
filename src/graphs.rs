@@ -13,7 +13,7 @@ impl<T: Molecule> ToGml for T {
     ///
     /// # Example
     /// ```
-    /// use molecules::prelude::*; 
+    /// use molecules::prelude::*;
     /// let mut molecule = Molecule3D::from_xyz("tests/ethane.xyz");
     /// let gml = molecule.to_gml();
     /// println!("{}", &gml);
@@ -40,8 +40,8 @@ impl<T: Molecule> ToGml for T {
 
         for &index in filter.iter() {
             let mut charge = match self.get_atom_charge(index) {
-                charge@1..=i8::MAX => format!("{}+", charge),
-                charge@i8::MIN..=-1 => format!("{}-", charge.abs()),
+                charge @ 1..=i8::MAX => format!("{}+", charge),
+                charge @ i8::MIN..=-1 => format!("{}-", charge.abs()),
                 0 => String::new(),
             };
             if self.is_atom_radical(index) {
@@ -51,8 +51,7 @@ impl<T: Molecule> ToGml for T {
             let atomic_symbol = atomic_number.atomic_symbol().unwrap_or("Unknown");
             atoms.push_str(&format!(
                 "node [id {index} label \"{}{}\"]\n",
-                atomic_symbol,
-                charge
+                atomic_symbol, charge
             ));
             for &bond in atom_bonds[index].iter() {
                 if index < bond.target()

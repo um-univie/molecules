@@ -1,4 +1,4 @@
-use crate::molecule::{ChiralClass, BondTarget, BondType};
+use crate::molecule::{BondTarget, BondType, ChiralClass};
 use crate::vector::Vector;
 use chemistry_consts::ElementProperties;
 
@@ -13,7 +13,6 @@ pub struct Atom {
     pub position_vector: Option<Vector>,
     pub bonds: Vec<BondTarget>,
 }
-
 
 impl Atom {
     pub fn new(atomic_number: u8) -> Atom {
@@ -52,11 +51,14 @@ impl Atom {
         self
     }
 
-    
     pub fn from_xyz_line(line: &str) -> Result<Atom, Box<dyn std::error::Error>> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 4 {
-            let atomic_number = parts[0].to_uppercase().as_str().atomic_number().ok_or("Could not find atomic number")?;
+            let atomic_number = parts[0]
+                .to_uppercase()
+                .as_str()
+                .atomic_number()
+                .ok_or("Could not find atomic number")?;
             let x = parts[1].parse::<f64>()?;
             let y = parts[2].parse::<f64>()?;
             let z = parts[3].parse::<f64>()?;
@@ -65,7 +67,7 @@ impl Atom {
             Err("Could not parse Line".into())
         }
     }
-    
+
     /// Returns the expected valency of the atom based on its atomic number
     ///
     /// # Examples
@@ -96,7 +98,9 @@ impl Atom {
     }
 
     pub fn is_aromatic(&self) -> bool {
-        self.bonds.iter().any(|bond| bond.bond_type() == BondType::Aromatic)
+        self.bonds
+            .iter()
+            .any(|bond| bond.bond_type() == BondType::Aromatic)
     }
 
     pub fn set_charge(&mut self, charge: i8) {
@@ -130,8 +134,6 @@ impl Atom {
     pub fn monoisotopic_mass(&self) -> Option<f64> {
         self.atomic_number.monoisotopic_mass()
     }
-
-
 
     /// Calculates the distance between two atoms.
     ///
@@ -218,8 +220,7 @@ impl Atom {
         let expected_valency = atomic_number.valencies()?.next()?;
         let actual_valency = self.actual_valency();
         // May need to be changed for elements with unknown valencies
-        Some(actual_valency - expected_valency
-        )
+        Some(actual_valency - expected_valency)
     }
     pub fn actual_valency(&self) -> i8 {
         self.bonds

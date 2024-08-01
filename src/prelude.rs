@@ -1,8 +1,7 @@
-pub use crate::{molecule::{Molecule, Molecule2D, Molecule3D},
-graphs::ToGml,
-io::FromSMILES,
-atom::Atom,
-vector::Vector,
+pub use crate::{
+    atom::Atom,
+    graphs::ToGml,
+    io::FromSMILES,
+    molecule::{Molecule, Molecule2D, Molecule3D},
+    vector::Vector,
 };
-
-
