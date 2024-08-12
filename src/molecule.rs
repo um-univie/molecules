@@ -187,6 +187,9 @@ pub trait Molecule {
             .filter(|bond| self.atomic_numbers()[bond.target()] == element)
             .count()
     }
+    fn expected_valency(&self, atom_index: usize) -> Option<i8> {
+        self.atomic_numbers()[atom_index].valencies()?.next()
+    }
     fn actual_valency(&self, atom_index: usize) -> i8 {
         self.atom_bonds()[atom_index]
             .iter()
@@ -207,8 +210,7 @@ pub trait Molecule {
             + self.get_atom_charge(atom_index).abs()
     }
     fn degree(&self, atom_index: usize) -> Option<i8> {
-        let atomic_number = self.atomic_numbers()[atom_index];
-        let expected_valency = atomic_number.valencies()?.next()?;
+        let expected_valency = self.expected_valency(atom_index)?;
         let actual_valency = self.actual_valency(atom_index);
         // May need to be changed for elements with unknown valencies
         Some(actual_valency - expected_valency)
