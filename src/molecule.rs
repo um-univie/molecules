@@ -113,7 +113,7 @@ pub struct Molecule2D {
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
-    pub is_radical: Vec<bool>,
+    pub radical_states: Vec<bool>,
     atom_bonds: Vec<Vec<BondTarget>>,
 }
 
@@ -125,7 +125,7 @@ pub struct Molecule3D {
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
-    pub is_radical: Vec<bool>,
+    pub radical_states: Vec<bool>,
     pub positions: Vec<Vector>,
     atom_bonds: Vec<Vec<BondTarget>>,
 }
@@ -144,6 +144,7 @@ pub trait Molecule {
     fn atom_classes_mut(&mut self) -> &mut Option<Vec<u8>>;
     fn add_hydrogens(&mut self);
     fn from_atoms(atoms: Vec<Atom>) -> Self;
+    fn radical_states(&self) -> &[bool];
 
     fn len(&self) -> usize {
         self.atomic_numbers().len()
@@ -151,6 +152,13 @@ pub trait Molecule {
     fn is_empty(&self) -> bool {
         self.atomic_numbers().is_empty()
     }
+
+    fn is_radical(&self) -> bool {
+        self.radical_states().iter().any(|&is_radical| is_radical)
+    }
+
+
+
     fn get_atomic_number(&self, atom_index: usize) -> u8 {
         self.atomic_numbers()[atom_index]
     }
@@ -646,11 +654,15 @@ impl Molecule for Molecule3D {
     fn isotopes(&self) -> Option<&Vec<u16>> {
         self.isotopes.as_ref()
     }
+
+    fn radical_states(&self) -> &[bool] {
+        &self.radical_states
+    }
     fn is_atom_radical(&self, atom_index: usize) -> bool {
-        self.is_radical[atom_index]
+        self.radical_states[atom_index]
     }
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool) {
-        self.is_radical[atom_index] = is_radical;
+        self.radical_states[atom_index] = is_radical;
     }
 
     fn add_hydrogens(&mut self) {
@@ -667,7 +679,7 @@ impl Molecule for Molecule3D {
     fn from_atoms(atoms: Vec<Atom>) -> Self {
         let atomic_numbers = atoms.iter().map(|atom| atom.atomic_number).collect();
         let charges = atoms.iter().map(|atom| atom.charge).collect();
-        let is_radical = atoms.iter().map(|atom| atom.is_radical).collect();
+        let radical_states = atoms.iter().map(|atom| atom.is_radical).collect();
         let mut isotopes = None;
         if atoms.iter().any(|atom| atom.isotope.is_some()) {
             isotopes = Some(
@@ -704,7 +716,7 @@ impl Molecule for Molecule3D {
         let mut molecule = Molecule3D {
             atomic_numbers,
             charges,
-            is_radical,
+            radical_states,
             atom_bonds,
             positions,
             isotopes,
@@ -753,11 +765,14 @@ impl Molecule for Molecule2D {
     fn isotopes(&self) -> Option<&Vec<u16>> {
         self.isotopes.as_ref()
     }
+    fn radical_states(&self) -> &[bool] {
+        &self.radical_states
+    }
     fn is_atom_radical(&self, atom_index: usize) -> bool {
-        self.is_radical[atom_index]
+        self.radical_states[atom_index]
     }
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool) {
-        self.is_radical[atom_index] = is_radical;
+        self.radical_states[atom_index] = is_radical;
     }
     fn add_hydrogens(&mut self) {
         let degrees = self.degrees();
@@ -776,7 +791,7 @@ impl Molecule for Molecule2D {
     fn from_atoms(atoms: Vec<Atom>) -> Self {
         let atomic_numbers = atoms.iter().map(|atom| atom.atomic_number).collect();
         let charges = atoms.iter().map(|atom| atom.charge).collect();
-        let is_radical = atoms.iter().map(|atom| atom.is_radical).collect();
+        let radical_states = atoms.iter().map(|atom| atom.is_radical).collect();
 
         let atom_bonds = atoms.iter().map(|atom| atom.bonds.clone()).collect();
         let mut isotopes = None;
@@ -821,7 +836,7 @@ impl Molecule for Molecule2D {
         Molecule2D {
             atomic_numbers,
             charges,
-            is_radical,
+            radical_states,
             atom_bonds,
             isotopes,
             chiral_classes,
@@ -978,7 +993,7 @@ impl Molecule3D {
     }
 
     pub fn is_atom_radical(&self, atom_index: usize) -> bool {
-        self.is_radical[atom_index]
+        self.radical_state[atom_index]
     }
 
     pub fn add_atom(&mut self, atom: Atom) {
@@ -1408,7 +1423,7 @@ impl Molecule3D {
             })
             .sum::<i8>()
             / 2
-            + if self.is_radical[atom_index] { 1 } else { 0 }
+            + if self.radical_states[atom_index] { 1 } else { 0 }
             + self.get_charge(atom_index).abs()
     }
     pub fn shift_charge(&mut self, index: usize, neighbor_index: usize, charge: i8) {
@@ -1494,7 +1509,7 @@ impl Molecule3D {
             let new_charges = component.iter().map(|&index| self.charges[index]).collect();
             let new_is_radical = component
                 .iter()
-                .map(|&index| self.is_radical[index])
+                .map(|&index| self.radical_states[index])
                 .collect();
 
             // TODO: Properly implement thi
@@ -1514,7 +1529,7 @@ impl Molecule3D {
             let mut molecule = Molecule3D {
                 atomic_numbers,
                 charges: new_charges,
-                is_radical: new_is_radical,
+                radical_states: new_is_radical,
                 atom_bonds: new_bonds,
                 positions: new_positions,
                 ..Default::default()
