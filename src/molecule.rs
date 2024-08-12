@@ -148,6 +148,9 @@ pub trait Molecule {
     fn len(&self) -> usize {
         self.atomic_numbers().len()
     }
+    fn is_empty(&self) -> bool {
+        self.atomic_numbers().is_empty()
+    }
     fn get_atomic_number(&self, atom_index: usize) -> u8 {
         self.atomic_numbers()[atom_index]
     }
@@ -167,6 +170,8 @@ pub trait Molecule {
         self.get_atom_charge(atom_index1)
             .cmp(&self.get_atom_charge(atom_index2))
     }
+
+
 
     fn number_of_bonded_element(&self, atom_index: usize, element: u8) -> usize {
         self.get_bonds(atom_index)
@@ -200,6 +205,7 @@ pub trait Molecule {
         // May need to be changed for elements with unknown valencies
         Some(actual_valency - expected_valency)
     }
+
     fn degrees(&self) -> Vec<i8> {
         self.atomic_numbers()
             .iter()
@@ -447,6 +453,19 @@ pub trait Molecule {
         root
     }
 
+    fn number_of_pi_electrons(&self, atom_index: usize) -> usize {
+        let mut number_of_pi_electrons = 0;
+        for bond in self.get_bonds(atom_index) {
+            if bond.bond_type() == BondType::Double || bond.bond_type() == BondType::Aromatic {
+                number_of_pi_electrons += 2;
+            } else if bond.bond_type() == BondType::Triple {
+                number_of_pi_electrons += 4;
+            }
+        }
+
+        number_of_pi_electrons
+    }
+
     fn molecular_formula(&self) -> MolecularFormula {
         MolecularFormula::from_molecule(self)
     }
@@ -537,6 +556,56 @@ pub trait Molecule {
             }
         }
         smiles
+    }
+    /// This function returns the rings in the molecule
+    /// 
+    /// # Examples
+    /// use molecules::prelude::*;
+    /// let molecule = Molecule3D::from_smiles("C1CCCCC1CC2CCCCC2");
+    ///
+    /// println!("{molecule.find_rings()}");
+    /// assert_eq!(molecule.find_rings(), vec![vec![0, 1, 2, 3, 4, 5],vec![6, 7, 8, 9, 10, 11]]);
+    fn find_rings(&self) -> Vec<Vec<usize>> {
+        let mut rings = Vec::new();
+        let mut visited = vec![false; self.atomic_numbers().len()];
+        let mut path = Vec::new();
+        let mut path_set = HashSet::new();
+
+        for start in 0..self.atomic_numbers().len() {
+            if !visited[start] {
+                self.dfs_find_rings(start, start, &mut visited, &mut path, &mut path_set, &mut rings);
+            }
+        }
+
+        rings
+    }
+
+    fn dfs_find_rings(
+        &self,
+        current: usize,
+        parent: usize,
+        visited: &mut Vec<bool>,
+        path: &mut Vec<usize>,
+        path_set: &mut HashSet<usize>,
+        rings: &mut Vec<Vec<usize>>,
+    ) {
+        visited[current] = true;
+        path.push(current);
+        path_set.insert(current);
+
+        for &BondTarget { target, .. } in &self.atom_bonds()[current] {
+            if !visited[target] {
+                self.dfs_find_rings(target, current, visited, path, path_set, rings);
+            } else if target != parent && path_set.contains(&target) {
+                // Found a cycle
+                let cycle_start = path.iter().position(|&x| x == target).unwrap();
+                let cycle = path[cycle_start..].to_vec();
+                rings.push(cycle);
+            }
+        }
+
+        path.pop();
+        path_set.remove(&current);
     }
 }
 
@@ -2298,3 +2367,7 @@ impl fmt::Display for MoleculeError {
 }
 
 impl std::error::Error for MoleculeError {}
+
+fn is_hueckel_satisfied(number_of_pi_electrons: usize) -> bool {
+    number_of_pi_electrons % 4 == 2
+}

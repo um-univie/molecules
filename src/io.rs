@@ -30,6 +30,7 @@ pub struct SMILESParser {
     last_bond_type: BondType,
     ring_number: Option<usize>,
     ring_bonds: IntMap<usize, (Option<usize>, Option<usize>)>,
+    ring_atoms: Vec<usize>,
     hydrogens: IntMap<usize, u8>,
     branch_stack: Vec<usize>,
     branch_exits: usize,
