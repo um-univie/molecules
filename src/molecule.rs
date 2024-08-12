@@ -145,6 +145,9 @@ pub trait Molecule {
     fn add_hydrogens(&mut self);
     fn from_atoms(atoms: Vec<Atom>) -> Self;
     fn radical_states(&self) -> &[bool];
+    fn get_atomic_symbol(&self, atom_index: usize) -> Option<&str> {
+        self.atomic_numbers().get(atom_index)?.atomic_symbol()
+    }
 
     fn len(&self) -> usize {
         self.atomic_numbers().len()
