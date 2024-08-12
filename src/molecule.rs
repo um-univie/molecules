@@ -993,7 +993,7 @@ impl Molecule3D {
     }
 
     pub fn is_atom_radical(&self, atom_index: usize) -> bool {
-        self.radical_state[atom_index]
+        self.radical_states[atom_index]
     }
 
     pub fn add_atom(&mut self, atom: Atom) {
