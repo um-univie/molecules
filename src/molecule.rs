@@ -189,7 +189,7 @@ pub trait Molecule {
 
 
     fn number_of_bonded_element(&self, atom_index: usize, element: u8) -> usize {
-        self.get_bonds(atom_index)
+        self.get_atom_bonds(atom_index)
             .iter()
             .filter(|bond| self.atomic_numbers()[bond.target()] == element)
             .count()
@@ -394,7 +394,7 @@ pub trait Molecule {
         }
         connected_components
     }
-    fn get_bonds(&self, atom_index: usize) -> &[BondTarget] {
+    fn get_atom_bonds(&self, atom_index: usize) -> &[BondTarget] {
         &self.atom_bonds()[atom_index]
     }
     fn traverse_component(
@@ -409,7 +409,7 @@ pub trait Molecule {
 
         while let Some(index) = stack.pop() {
             current_component.push(index);
-            for &bond in self.get_bonds(index) {
+            for &bond in self.get_atom_bonds(index) {
                 let target = bond.target();
                 if !visited_atoms[target] {
                     stack.push(target);
@@ -472,7 +472,7 @@ pub trait Molecule {
 
     fn number_of_pi_electrons(&self, atom_index: usize) -> usize {
         let mut number_of_pi_electrons = 0;
-        for bond in self.get_bonds(atom_index) {
+        for bond in self.get_atom_bonds(atom_index) {
             if bond.bond_type() == BondType::Double || bond.bond_type() == BondType::Aromatic {
                 number_of_pi_electrons += 2;
             } else if bond.bond_type() == BondType::Triple {
@@ -1333,7 +1333,7 @@ impl Molecule3D {
             .flat_map(|angle| {
                 let (atom1, atom2, atom3) = angle.atoms;
 
-                self.get_bonds(atom1)
+                self.get_atom_bonds(atom1)
                     .iter()
                     .filter_map(|&bond| {
                         if bond.target() != atom3 && bond.target() != atom2 && atom3 < bond.target()
