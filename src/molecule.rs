@@ -720,11 +720,12 @@ impl Molecule for Molecule3D {
             );
         }
         let atom_bonds = atoms.iter().map(|atom| atom.bonds().clone()).collect();
-        let positions = atoms
+        let positions: Vec<Vector> = atoms
             .iter()
             .map(|atom| atom.position_vector.unwrap_or_default())
             .collect();
-        let mut chirals = None;
+
+        let mut chirals =None;
         if atoms
             .iter()
             .any(|atom| atom.chiral_class != ChiralClass::None)
@@ -1337,13 +1338,15 @@ impl Molecule3D {
     // PROTOTYPE
     pub fn dihedrals(&mut self) -> Vec<((usize, usize, usize, usize), f64)> {
         let bond_angles = self.find_angles();
-        let dihedrals = bond_angles
-            .par_iter()
+        let dihedrals: Vec<((usize,usize,usize,usize),f64)>= bond_angles
+            .iter()
             .flat_map(|angle| {
                 let (atom1, atom2, atom3) = angle.atoms;
-                let Some(bonds) = self.atom_bonds.get(atom2) else {
+
+                let Some(bonds) = self.atom_bonds.get(atom1) else {
                     return Vec::new();
                 };
+
                 bonds
                     .iter()
                     .filter_map(|&bond| {
@@ -1359,6 +1362,10 @@ impl Molecule3D {
                     .collect::<Vec<_>>()
             })
             .collect();
+        println!("Found {} dihedrals", dihedrals.len());
+        for (dihedral, angle) in &dihedrals {
+            println!("Dihedral: {:?}, Angle: {}", dihedral, angle);
+        }
         dihedrals
     }
     /// This function calculates the dihedral angle for all atoms

@@ -269,7 +269,7 @@ impl Vector {
     ///
     /// let v = Vector::random_unit_vector();
     /// println!("Vector: {:?}", v);
-    /// assert_eq!(v.length().ceil(),1.0)
+    /// assert_eq!(v.length().round(),1.0)
     /// ```
     ///
     pub fn random_unit_vector() -> Self {
