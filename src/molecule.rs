@@ -187,7 +187,7 @@ pub trait Molecule {
     }
     /// This function returns the number of bonded elements of a specific type in case of invalid atom index it returns 0 to keep the api simple
     fn number_of_bonded_element(&self, atom_index: usize, element: u8) -> usize {
-        let Some(bonds) = self.get_bonds(atom_index) else {
+        let Some(bonds) = self.get_atom_bonds(atom_index) else {
             return 0;
         };
         bonds
@@ -395,7 +395,7 @@ pub trait Molecule {
         }
         connected_components
     }
-    fn get_bonds(&self, atom_index: usize) -> Option<&[BondTarget]> {
+    fn get_atom_bonds(&self, atom_index: usize) -> Option<&[BondTarget]> {
         self.atom_bonds().get(atom_index).map(|bonds| bonds.as_slice())
     }
     fn traverse_component(
@@ -410,7 +410,7 @@ pub trait Molecule {
 
         while let Some(index) = stack.pop() {
             current_component.push(index);
-            let Some(bonds) = self.get_bonds(index) else {
+            let Some(bonds) = self.get_atom_bonds(index) else {
                 // This should never happen
                 println!("No bonds found for atom {}, this means an out of bounds access", index);
                 continue;
@@ -479,7 +479,7 @@ pub trait Molecule {
     fn number_of_pi_electrons(&self, atom_index: usize) -> usize {
         let mut number_of_pi_electrons = 0;
         // Default to 0 if no bonds are found
-        let Some(bonds) = self.get_bonds(atom_index) else {
+        let Some(bonds) = self.get_atom_bonds(atom_index) else {
             return 0;
         };
         for bond in bonds {
