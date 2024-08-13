@@ -261,7 +261,11 @@ pub trait Molecule {
     fn is_atom_radical(&self, atom_index: usize) -> bool;
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool);
     fn set_atom_charge(&mut self, atom_index: usize, charge: i8) {
-        self.charges_mut()[atom_index] = charge;
+        if atom_index < self.charges().len() {
+            self.charges_mut()[atom_index] = charge;
+        } else {
+            println!("Atom index out of bounds, could not set charge");
+        }
     }
     fn get_atom_class(&self, atom_index: usize) -> u8 {
         let reference = self.atom_classes().as_ref();
@@ -1173,8 +1177,12 @@ impl Molecule3D {
     }
 
     pub fn update_atom_charge(&mut self, atom_index: usize, charge: i8) {
-        self.charges[atom_index] += charge;
-        self.charge += charge as i32;
+        if atom_index < self.charges().len() {
+            self.charge += charge as i32;
+            self.charges_mut()[atom_index] = charge;
+        } else {
+            println!("Atom index out of bounds, could not update charge");
+        }
     }
 
     pub fn identify_difference(&self, other: &Molecule3D) {
