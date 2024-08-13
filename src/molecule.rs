@@ -1017,6 +1017,16 @@ impl Molecule3D {
 
     pub fn add_atom(&mut self, atom: Atom) {
         self.atomic_numbers.push(atom.atomic_number);
+        self.positions.push(atom.position_vector.unwrap_or_default());
+        self.charges.push(atom.charge);
+        self.radical_states.push(atom.is_radical);
+        self.atom_bonds.push(atom.bonds);
+        self.isotopes
+            .get_or_insert_with(Vec::new)
+            .push(atom.isotope.unwrap_or_default());
+        self.chiral_classes
+            .get_or_insert_with(Vec::new)
+            .push(atom.chiral_class);
     }
 
     // This function returns a reference to outgoing bonds of an atom
