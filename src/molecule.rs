@@ -185,11 +185,12 @@ pub trait Molecule {
         self.get_atom_charge(atom_index1)
             .cmp(&self.get_atom_charge(atom_index2))
     }
-
-
-
+    /// This function returns the number of bonded elements of a specific type in case of invalid atom index it returns 0 to keep the api simple
     fn number_of_bonded_element(&self, atom_index: usize, element: u8) -> usize {
-        self.get_atom_bonds(atom_index)
+        let Some(bonds) = self.get_bonds(atom_index) else {
+            return 0;
+        };
+        bonds
             .iter()
             .filter(|bond| self.atomic_numbers()[bond.target()] == element)
             .count()
@@ -394,8 +395,8 @@ pub trait Molecule {
         }
         connected_components
     }
-    fn get_atom_bonds(&self, atom_index: usize) -> &[BondTarget] {
-        &self.atom_bonds()[atom_index]
+    fn get_bonds(&self, atom_index: usize) -> Option<&[BondTarget]> {
+        self.atom_bonds().get(atom_index).map(|bonds| bonds.as_slice())
     }
     fn traverse_component(
         &self,
@@ -409,7 +410,12 @@ pub trait Molecule {
 
         while let Some(index) = stack.pop() {
             current_component.push(index);
-            for &bond in self.get_atom_bonds(index) {
+            let Some(bonds) = self.get_bonds(index) else {
+                // This should never happen
+                println!("No bonds found for atom {}, this means an out of bounds access", index);
+                continue;
+            };
+            for &bond in bonds {
                 let target = bond.target();
                 if !visited_atoms[target] {
                     stack.push(target);
@@ -472,14 +478,17 @@ pub trait Molecule {
 
     fn number_of_pi_electrons(&self, atom_index: usize) -> usize {
         let mut number_of_pi_electrons = 0;
-        for bond in self.get_atom_bonds(atom_index) {
+        // Default to 0 if no bonds are found
+        let Some(bonds) = self.get_bonds(atom_index) else {
+            return 0;
+        };
+        for bond in bonds {
             if bond.bond_type() == BondType::Double || bond.bond_type() == BondType::Aromatic {
                 number_of_pi_electrons += 2;
             } else if bond.bond_type() == BondType::Triple {
                 number_of_pi_electrons += 4;
             }
         }
-
         number_of_pi_electrons
     }
 
@@ -1332,8 +1341,10 @@ impl Molecule3D {
             .par_iter()
             .flat_map(|angle| {
                 let (atom1, atom2, atom3) = angle.atoms;
-
-                self.get_atom_bonds(atom1)
+                let Some(bonds) = self.atom_bonds.get(atom2) else {
+                    return Vec::new();
+                };
+                bonds
                     .iter()
                     .filter_map(|&bond| {
                         if bond.target() != atom3 && bond.target() != atom2 && atom3 < bond.target()
