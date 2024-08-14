@@ -1207,7 +1207,7 @@ impl Molecule3D {
     pub fn update_atom_charge(&mut self, atom_index: usize, charge: i8) {
         if atom_index < self.charges().len() {
             self.charge += charge as i32;
-            self.charges_mut()[atom_index] = charge;
+            self.charges_mut()[atom_index] += charge;
         } else {
             println!("Atom index out of bounds, could not update charge");
         }
