@@ -113,7 +113,7 @@ pub struct Molecule2D {
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
-    pub radical_states: Vec<bool>,
+    radical_states: Vec<bool>,
     atom_bonds: Vec<Vec<BondTarget>>,
 }
 
@@ -125,8 +125,8 @@ pub struct Molecule3D {
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
-    pub radical_states: Vec<bool>,
     pub positions: Vec<Vector>,
+    radical_states: Vec<bool>,
     atom_bonds: Vec<Vec<BondTarget>>,
 }
 
@@ -135,8 +135,8 @@ pub trait Molecule {
     fn atom_bonds_mut(&mut self) -> &mut Vec<Vec<BondTarget>>;
     fn atomic_numbers(&self) -> &[u8];
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8>;
-    fn chiral_classes(&self) -> Option<&Vec<ChiralClass>>;
-    fn chiral_classes_mut(&mut self) -> &mut Vec<ChiralClass>;
+    fn chiral_classes(&self) -> Option<&[ChiralClass]>;
+    fn chiral_classes_mut(&mut self) -> Option<&mut Vec<ChiralClass>>;
     fn charges(&self) -> &[i8];
     fn charges_mut(&mut self) -> &mut Vec<i8>;
     fn isotopes(&self) -> Option<&Vec<u16>>;
@@ -145,6 +145,19 @@ pub trait Molecule {
     fn add_hydrogens(&mut self);
     fn from_atoms(atoms: Vec<Atom>) -> Self;
     fn radical_states(&self) -> &[bool];
+    fn radical_states_mut(&mut self) -> &mut Vec<bool>;
+    fn pop_atom(&mut self) {
+        self.atomic_numbers_mut().pop();
+        self.charges_mut().pop();
+        self.radical_states_mut().pop();
+        self.atom_bonds_mut().pop();
+        if let Some(classes) = self.atom_classes_mut() {
+            classes.pop();
+        }
+        if let Some(chirals) = self.chiral_classes_mut() {
+            chirals.pop();
+        }
+    }
     fn get_atomic_symbol(&self, atom_index: usize) -> Option<&str> {
         self.atomic_numbers().get(atom_index)?.atomic_symbol()
     }
@@ -665,15 +678,19 @@ impl Molecule for Molecule3D {
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8> {
         &mut self.atomic_numbers
     }
-    fn chiral_classes(&self) -> Option<&Vec<ChiralClass>> {
-        self.chiral_classes.as_ref()
+    
+    fn chiral_classes(&self) -> Option<&[ChiralClass]> {
+        self.chiral_classes.as_deref()
     }
-    fn chiral_classes_mut(&mut self) -> &mut Vec<ChiralClass> {
-        self.chiral_classes.get_or_insert_with(Vec::new)
+
+    fn chiral_classes_mut(&mut self) -> Option<&mut Vec<ChiralClass>> {
+        self.chiral_classes.as_mut()
     }
+
     fn get_charge(&self) -> i32 {
         self.charge
     }
+
     fn isotopes(&self) -> Option<&Vec<u16>> {
         self.isotopes.as_ref()
     }
@@ -681,6 +698,11 @@ impl Molecule for Molecule3D {
     fn radical_states(&self) -> &[bool] {
         &self.radical_states
     }
+
+    fn radical_states_mut(&mut self) -> &mut Vec<bool> {
+        &mut self.radical_states
+    }
+
     fn is_atom_radical(&self, atom_index: usize) -> bool {
         self.radical_states[atom_index]
     }
@@ -781,11 +803,11 @@ impl Molecule for Molecule2D {
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8> {
         &mut self.atomic_numbers
     }
-    fn chiral_classes(&self) -> Option<&Vec<ChiralClass>> {
-        self.chiral_classes.as_ref()
+    fn chiral_classes(&self) -> Option<&[ChiralClass]> {
+        self.chiral_classes.as_deref()
     }
-    fn chiral_classes_mut(&mut self) -> &mut Vec<ChiralClass> {
-        self.chiral_classes.get_or_insert_with(Vec::new)
+    fn chiral_classes_mut(&mut self) -> Option<&mut Vec<ChiralClass>> {
+        self.chiral_classes.as_mut()
     }
     fn get_charge(&self) -> i32 {
         self.charge
@@ -795,6 +817,9 @@ impl Molecule for Molecule2D {
     }
     fn radical_states(&self) -> &[bool] {
         &self.radical_states
+    }
+    fn radical_states_mut(&mut self) -> &mut Vec<bool> {
+        &mut self.radical_states
     }
     fn is_atom_radical(&self, atom_index: usize) -> bool {
         self.radical_states[atom_index]
