@@ -399,6 +399,7 @@ pub trait Molecule {
         }
         connected_components
     }
+
     fn get_atom_bonds(&self, atom_index: usize) -> Option<&[BondTarget]> {
         self.atom_bonds().get(atom_index).map(|bonds| bonds.as_slice())
     }
@@ -415,7 +416,6 @@ pub trait Molecule {
         while let Some(index) = stack.pop() {
             current_component.push(index);
             let Some(bonds) = self.get_atom_bonds(index) else {
-                // This should never happen
                 println!("No bonds found for atom {}, this means an out of bounds access", index);
                 continue;
             };
@@ -427,6 +427,7 @@ pub trait Molecule {
                 }
             }
         }
+
         current_component
     }
 
@@ -684,7 +685,11 @@ impl Molecule for Molecule3D {
         self.radical_states[atom_index]
     }
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool) {
-        self.radical_states[atom_index] = is_radical;
+        if atom_index < self.radical_states.len() {
+            self.radical_states[atom_index] = is_radical;
+        } else {
+            println!("Atom index out of bounds, could not set radical state");
+        }
     }
 
     fn add_hydrogens(&mut self) {
@@ -1857,7 +1862,7 @@ struct SmilesParameters {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Node {
+pub struct Node {
     index: usize,
     bond_type: BondType,
     children: Vec<Node>,
