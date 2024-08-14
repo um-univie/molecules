@@ -363,8 +363,6 @@ pub trait Molecule {
     fn match_submolecule(&self, other: &Self) -> Option<Vec<IntMap<usize, usize>>> {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
-        println!("{self_components:?}");
-        println!("{other_components:?}");
 
         self_components.retain(|component| component.len() > 1);
         other_components.retain(|component| component.len() > 1);
@@ -1410,10 +1408,6 @@ impl Molecule3D {
                     .collect::<Vec<_>>()
             })
             .collect();
-        println!("Found {} dihedrals", dihedrals.len());
-        for (dihedral, angle) in &dihedrals {
-            println!("Dihedral: {:?}, Angle: {}", dihedral, angle);
-        }
         dihedrals
     }
     /// This function calculates the dihedral angle for all atoms
