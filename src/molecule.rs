@@ -723,57 +723,10 @@ impl Molecule for Molecule3D {
             }
         });
     }
+    // Molecule3D specific implementation
     fn from_atoms(atoms: Vec<Atom>) -> Self {
-        let atomic_numbers = atoms.iter().map(|atom| atom.atomic_number).collect();
-        let charges = atoms.iter().map(|atom| atom.charge).collect();
-        let radical_states = atoms.iter().map(|atom| atom.is_radical).collect();
-        let mut isotopes = None;
-        if atoms.iter().any(|atom| atom.isotope.is_some()) {
-            isotopes = Some(
-                atoms
-                    .iter()
-                    .map(|atom| {
-                        if atom.isotope.is_some() {
-                            atom.isotope().unwrap()
-                        } else {
-                            atom.atomic_number()
-                                .isotopes()
-                                .unwrap()
-                                .next()
-                                .unwrap()
-                                .mass
-                                .round() as u16
-                        }
-                    })
-                    .collect(),
-            );
-        }
-        let atom_bonds = atoms.iter().map(|atom| atom.bonds().clone()).collect();
-        let positions: Vec<Vector> = atoms
-            .iter()
-            .map(|atom| atom.position_vector.unwrap_or_default())
-            .collect();
-
-        let mut chirals =None;
-        if atoms
-            .iter()
-            .any(|atom| atom.chiral_class != ChiralClass::None)
-        {
-            chirals = Some(atoms.into_iter().map(|atom| atom.chiral_class).collect());
-        }
-        let mut molecule = Molecule3D {
-            atomic_numbers,
-            charges,
-            radical_states,
-            atom_bonds,
-            positions,
-            isotopes,
-            chiral_classes: chirals,
-            ..Default::default()
-        };
-        if molecule.atom_bonds.iter().all(|bonds| bonds.is_empty()) {
-            molecule.identify_bonds(BOND_TOLERANCE);
-        }
+        let mut molecule = Molecule3D::from_atoms_raw(atoms);
+        molecule.identify_bonds(BOND_TOLERANCE);
         molecule
     }
 }
@@ -1291,7 +1244,57 @@ impl Molecule3D {
             .collect::<Vec<Vec<BondTarget>>>();
         self.atom_bonds = bonds;
     }
+
+
+    pub fn identify_bonds_alternate_covalent_radii(&mut self,covalent_radii: &[f64], tolerance: f64){
+        // The threshold is dynamically determined by the largest covalent radius in the molecule
+        let threshold_squared = (self.atomic_numbers
+            .iter()
+            .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
+                prev.max(atomic_number.covalent_radius().unwrap_or_default())
+            })
+            * 2.0)
+            .powi(2);
+        let kdtree = self.build_tree();
+        let bonds = self
+            .positions
+            .par_iter()
+            .enumerate()
+            .map(|(index, position)| {
+                let mut bonds = kdtree
+                    .within::<SquaredEuclidean>(
+                        &[position.x, position.y, position.z],
+                        threshold_squared,
+                    )
+                    .iter()
+                    .filter_map(|neighbor| {
+                        if neighbor.item == index as u64 {
+                            return None;
+                        }
+                        let distance = neighbor.distance;
+                        let covalent_radius1 = covalent_radii.get(index);
+                        let covalent_radius2 = covalent_radii.get(neighbor.item as usize);
+                        if covalent_radius1.is_none() || covalent_radius2.is_none() {
+                            return None;
+                        }
+
+                        let is_bonded = distance < ((covalent_radius1.unwrap() + covalent_radius2.unwrap()) * tolerance).powi(2);
+                        if is_bonded {
+                            Some(BondTarget::single(neighbor.item as usize))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<BondTarget>>();
+                bonds.sort_by_key(|bond| bond.target);
+                bonds
+            })
+            .collect::<Vec<Vec<BondTarget>>>();
+        self.atom_bonds = bonds;
+    }
+
     /// This function checks if two atoms are bonded based on their atomic numbers and distance
+
     fn is_bonded(
         &self,
         index1: usize,
@@ -2307,6 +2310,62 @@ impl Molecule3D {
         }
 
         assigned
+    }
+    // Molecule3D specific implementation
+    fn from_atoms_raw(atoms: Vec<Atom>) -> Self {
+        let atomic_numbers = atoms.iter().map(|atom| atom.atomic_number).collect();
+        let charges = atoms.iter().map(|atom| atom.charge).collect();
+        let radical_states = atoms.iter().map(|atom| atom.is_radical).collect();
+        let mut isotopes = None;
+        if atoms.iter().any(|atom| atom.isotope.is_some()) {
+            isotopes = Some(
+                atoms
+                    .iter()
+                    .map(|atom| {
+                        if atom.isotope.is_some() {
+                            atom.isotope().unwrap()
+                        } else {
+                            atom.atomic_number()
+                                .isotopes()
+                                .unwrap()
+                                .next()
+                                .unwrap()
+                                .mass
+                                .round() as u16
+                        }
+                    })
+                    .collect(),
+            );
+        }
+        let atom_bonds = atoms.iter().map(|atom| atom.bonds().clone()).collect();
+        let positions: Vec<Vector> = atoms
+            .iter()
+            .map(|atom| atom.position_vector.unwrap_or_default())
+            .collect();
+
+        let mut chirals =None;
+        if atoms
+            .iter()
+            .any(|atom| atom.chiral_class != ChiralClass::None)
+        {
+            chirals = Some(atoms.into_iter().map(|atom| atom.chiral_class).collect());
+        }
+        Molecule3D {
+            atomic_numbers,
+            charges,
+            radical_states,
+            atom_bonds,
+            positions,
+            isotopes,
+            chiral_classes: chirals,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_atoms_alternate_covalent_radii(atoms: Vec<Atom>, covalent_radii: &[f64]) -> Self {
+        let mut molecule = Molecule3D::from_atoms_raw(atoms);
+        molecule.identify_bonds_alternate_covalent_radii(covalent_radii, BOND_TOLERANCE);
+        molecule
     }
 
     pub fn charges(&self) -> &[i8] {
