@@ -1,5 +1,5 @@
 use crate::atom::Atom;
-use crate::consts::{BOND_SEARCH_THRESHOLD, BOND_TOLERANCE};
+use crate::consts::{BOND_TOLERANCE};
 use crate::vector::Vector;
 use chemistry_consts::ElementProperties;
 use core::fmt::{Display, Formatter};
@@ -771,7 +771,9 @@ impl Molecule for Molecule3D {
             chiral_classes: chirals,
             ..Default::default()
         };
-        molecule.identify_bonds(BOND_SEARCH_THRESHOLD);
+        if molecule.atom_bonds.iter().all(|bonds| bonds.is_empty()) {
+            molecule.identify_bonds(BOND_TOLERANCE);
+        }
         molecule
     }
 }
@@ -970,10 +972,10 @@ impl MolecularSystem {
         sum / count
     }
 
-    pub fn find_bonds(&mut self, threshold: f64) {
+    pub fn identify_bonds(&mut self, tolerance: f64) {
         self.molecules
             .iter_mut()
-            .for_each(|molecule| molecule.identify_bonds(threshold))
+            .for_each(|molecule| molecule.identify_bonds(tolerance))
     }
 
     pub fn number_of_atoms(&self) -> usize {
@@ -1248,8 +1250,15 @@ impl Molecule3D {
             })
             .collect()
     }
-    pub fn identify_bonds(&mut self, threshold: f64) {
-        let threshold_squared = threshold.powi(2);
+    pub fn identify_bonds(&mut self, tolerance: f64){
+        // The threshold is dynamically determined by the largest covalent radius in the molecule
+        let threshold_squared = (self.atomic_numbers
+            .iter()
+            .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
+                prev.max(atomic_number.covalent_radius().unwrap_or_default())
+            })
+            * 2.0)
+            .powi(2);
         let kdtree = self.build_tree();
         let bonds = self
             .positions
@@ -1268,7 +1277,7 @@ impl Molecule3D {
                         }
                         let distance = neighbor.distance;
                         let is_bonded =
-                            self.is_bonded(index, neighbor.item as usize, distance, BOND_TOLERANCE);
+                            self.is_bonded(index, neighbor.item as usize, distance, tolerance);
                         if is_bonded {
                             Some(BondTarget::single(neighbor.item as usize))
                         } else {
@@ -1595,7 +1604,7 @@ impl Molecule3D {
                 continue;
             }
 
-            let mut molecule = Molecule3D {
+            let molecule = Molecule3D {
                 atomic_numbers,
                 charges: new_charges,
                 radical_states: new_is_radical,
@@ -1603,7 +1612,6 @@ impl Molecule3D {
                 positions: new_positions,
                 ..Default::default()
             };
-            molecule.identify_bonds(BOND_SEARCH_THRESHOLD);
             molecules.push(molecule);
         }
         molecules
