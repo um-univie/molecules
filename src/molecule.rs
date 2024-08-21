@@ -368,8 +368,6 @@ pub trait Molecule {
         let mut other_components = other.get_components();
         if self.atomic_numbers().iter().zip(other.atomic_numbers()).all(|(a, b)| a == b) 
             && self.atom_bonds().iter().zip(other.atom_bonds()).all(|(a, b)| a == b)
-            && self.charges().iter().zip(other.charges()).all(|(a, b)| a == b)
-            && self.radical_states().iter().zip(other.radical_states()).all(|(a, b)| a == b)
         {
             return Some(vec![(0..self.number_of_atoms()).map(|index| (index,index)).collect()]);
         }
