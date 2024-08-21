@@ -366,6 +366,13 @@ pub trait Molecule {
     fn match_submolecule(&self, other: &Self) -> Option<Vec<IntMap<usize, usize>>> {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
+        if self.atomic_numbers().iter().zip(other.atomic_numbers()).all(|(a, b)| a == b) 
+            && self.atom_bonds().iter().zip(other.atom_bonds()).all(|(a, b)| a == b)
+            && self.charges().iter().zip(other.charges()).all(|(a, b)| a == b)
+            && self.radical_states().iter().zip(other.radical_states()).all(|(a, b)| a == b)
+        {
+            return Some(vec![(0..self_components.len()).map(|index| (index,index)).collect()]);
+        }
 
         self_components.retain(|component| component.len() > 1);
         other_components.retain(|component| component.len() > 1);
