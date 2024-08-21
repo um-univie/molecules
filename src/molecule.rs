@@ -183,7 +183,7 @@ pub trait Molecule {
     fn valency_delta(&self, atom_index: usize) -> Option<i8> {
         let expected_valency = self.expected_valency(atom_index)?;
         let actual_valency = self.actual_valency(atom_index);
-        Some(actual_valency - expected_valency)
+        Some(expected_valency - actual_valency)
     }
 
     fn get_atomic_number(&self, atom_index: usize) -> u8 {
