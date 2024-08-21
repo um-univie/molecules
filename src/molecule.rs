@@ -1485,7 +1485,7 @@ impl Molecule3D {
         let expected_valency = atomic_number.valencies()?.next()?;
         let actual_valency = self.actual_valency(atom_index);
         // May need to be changed for elements with unknown valencies
-        Some(actual_valency - expected_valency)
+        Some(actual_valency - expected_valency + self.get_charge(atom_index).abs() + self.is_atom_radical(atom_index) as i8)
     }
     /// Return the actual valency of the atom based on the number of bonds
     ///
