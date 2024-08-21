@@ -1507,8 +1507,6 @@ impl Molecule3D {
             })
             .sum::<i8>()
             / 2
-            + if self.radical_states[atom_index] { 1 } else { 0 }
-            + self.get_charge(atom_index).abs()
     }
     pub fn shift_charge(&mut self, index: usize, neighbor_index: usize, charge: i8) {
         self.update_atom_charge(index, -charge);
