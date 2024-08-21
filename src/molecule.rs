@@ -371,7 +371,7 @@ pub trait Molecule {
             && self.charges().iter().zip(other.charges()).all(|(a, b)| a == b)
             && self.radical_states().iter().zip(other.radical_states()).all(|(a, b)| a == b)
         {
-            return Some(vec![(0..self_components.len()).map(|index| (index,index)).collect()]);
+            return Some(vec![(0..self.number_of_atoms()).map(|index| (index,index)).collect()]);
         }
 
         self_components.retain(|component| component.len() > 1);
