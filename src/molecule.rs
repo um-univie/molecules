@@ -173,6 +173,13 @@ pub trait Molecule {
         self.radical_states().iter().any(|&is_radical| is_radical)
     }
 
+    /// This function returns the valency_delta of an atom
+    ///
+    ///
+    /// # Examples
+    /// use molecules::prelude::*;
+    /// let molecule = Molecule3D::from_smiles("C1CCCCC1CC2CCCCC2");
+    /// assert_eq!(molecule.valency_delta(0), Some(0));
     fn valency_delta(&self, atom_index: usize) -> Option<i8> {
         let expected_valency = self.expected_valency(atom_index)?;
         let actual_valency = self.actual_valency(atom_index);
@@ -223,18 +230,14 @@ pub trait Molecule {
             })
             .sum::<i8>()
             / 2
-            + if self.is_atom_radical(atom_index) {
-                1
-            } else {
-                0
-            }
-            + self.get_atom_charge(atom_index).abs()
     }
     fn degree(&self, atom_index: usize) -> Option<i8> {
         let expected_valency = self.expected_valency(atom_index)?;
         let actual_valency = self.actual_valency(atom_index);
+        let charge = self.get_atom_charge(atom_index);
+        let radical = self.is_atom_radical(atom_index) as i8;
         // May need to be changed for elements with unknown valencies
-        Some(actual_valency - expected_valency)
+        Some(actual_valency - expected_valency + charge.abs() + radical)
     }
 
     fn degrees(&self) -> Vec<i8> {
