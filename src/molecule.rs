@@ -1254,7 +1254,7 @@ impl Molecule3D {
     }
 
 
-    pub fn identify_bonds_alternate_covalent_radii(&mut self,covalent_radii: &[f64], tolerance: f64){
+    pub fn identify_bonds_alternate_covalent_radii(&mut self, covalent_radii: &[f64], tolerance: f64){
         // The threshold is dynamically determined by the largest covalent radius in the molecule
         let threshold_squared = (self.atomic_numbers
             .iter()
@@ -1281,8 +1281,10 @@ impl Molecule3D {
                             return None;
                         }
                         let distance = neighbor.distance;
-                        let covalent_radius1 = covalent_radii.get(index);
-                        let covalent_radius2 = covalent_radii.get(neighbor.item as usize);
+                        let atomic_number1 = self.get_atomic_number(index);
+                        let atomic_number2 = self.get_atomic_number(neighbor.item as usize);
+                        let covalent_radius1 = covalent_radii.get(atomic_number1 as usize);
+                        let covalent_radius2 = covalent_radii.get(atomic_number2 as usize);
                         if covalent_radius1.is_none() || covalent_radius2.is_none() {
                             return None;
                         }
@@ -2508,6 +2510,23 @@ mod tests {
         }
         assert_eq!(angles.len(), 1);
         assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
+    }
+    #[test]
+    fn test_alternate_covalent_radii() {
+        use super::*;
+        use chemistry_consts::*;
+        let atom1 = Atom::new(6).with_position((1.7, 0.0, 0.0));
+        let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
+        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.7));
+        let molecule = Molecule3D::from_atoms_alternate_covalent_radii(vec![atom1, atom2, atom3], &COVALENT_RADII);
+        let angles = molecule.find_angles();
+        println!("{:?}", angles);
+        for bonds in molecule.atom_bonds.iter() {
+            println!("{:?}", bonds);
+        }
+        assert_eq!(angles.len(), 1);
+        assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
+
     }
 }
 
