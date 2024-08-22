@@ -1,5 +1,5 @@
 use crate::atom::Atom;
-use crate::consts::{BOND_TOLERANCE};
+use crate::consts::BOND_TOLERANCE;
 use crate::vector::Vector;
 use chemistry_consts::ElementProperties;
 use core::fmt::{Display, Formatter};
