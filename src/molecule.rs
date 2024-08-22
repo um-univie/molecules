@@ -1218,7 +1218,7 @@ impl Molecule3D {
             .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
                 prev.max(atomic_number.covalent_radius().unwrap_or_default())
             })
-            * 2.0)
+            * 3.0)
             .powi(2);
         let kdtree = self.build_tree();
         let bonds = self
@@ -1259,9 +1259,10 @@ impl Molecule3D {
         let threshold_squared = (self.atomic_numbers
             .iter()
             .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
-                prev.max(atomic_number.covalent_radius().unwrap_or_default())
+                let covalent_radius = covalent_radii.get(atomic_number as usize);
+                prev.max(*covalent_radius.unwrap_or(&0.0))
             })
-            * 2.0)
+            * 3.0)
             .powi(2);
         let kdtree = self.build_tree();
         let bonds = self
