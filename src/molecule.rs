@@ -1826,14 +1826,14 @@ impl BondAngle {
         Self { angle, atoms }
     }
 }
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum BondState {
     Formed,
     #[default]
     Broken,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct BondChange {
     atom1_index: usize,
     atom2_index: usize,
