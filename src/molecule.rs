@@ -2497,12 +2497,15 @@ mod tests {
     #[test]
     fn test_bond_angle() {
         use super::*;
-        let atom1 = Atom::new(6).with_position((1.5, 0.0, 0.0));
+        let atom1 = Atom::new(6).with_position((1.7, 0.0, 0.0));
         let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
-        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.5));
+        let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.7));
         let molecule = Molecule3D::from_atoms(vec![atom1, atom2, atom3]);
         let angles = molecule.find_angles();
         println!("{:?}", angles);
+        for bonds in molecule.atom_bonds.iter() {
+            println!("{:?}", bonds);
+        }
         assert_eq!(angles.len(), 1);
         assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
     }
