@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn test_submolecule() {
         let molecules = SMILESParser::parse_smiles("C(C(C))COCCl.C(C(C))").unwrap();
-        let submolecule = molecules[0].match_submolecule(&molecules[1]).unwrap();
-        assert_eq!(submolecule.len(), 0);
+        let submolecule = molecules[0].match_submolecule(&molecules[1]);
+        assert_eq!(submolecule, None);
     }
 }

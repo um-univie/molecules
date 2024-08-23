@@ -400,6 +400,9 @@ pub trait Molecule {
                                 .collect::<IntMap<usize, usize>>()
                         })
                         .collect::<Vec<IntMap<usize, usize>>>();
+                    if mapping.is_empty() {
+                        continue;
+                    }
                     return Some(mapping);
                 };
             }
