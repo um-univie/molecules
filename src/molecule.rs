@@ -363,11 +363,12 @@ pub trait Molecule {
         }
         graph
     }
+
     fn match_submolecule(&self, other: &Self) -> Option<Vec<IntMap<usize, usize>>> {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
         if self.atomic_numbers().iter().zip(other.atomic_numbers()).all(|(a, b)| a == b) 
-            && self.atom_bonds().iter().zip(other.atom_bonds()).all(|(a, b)| a == b)
+            && self.atom_bonds().iter().zip(other.atom_bonds()).all(|(a, b)| a == b) && self.len() == other.len()
         {
             return Some(vec![(0..self.number_of_atoms()).map(|index| (index,index)).collect()]);
         }
@@ -1358,7 +1359,7 @@ impl Molecule3D {
             sum += position_vector;
         }
 
-        let count = self.atomic_numbers.len() as f64;
+        let count = self.len() as f64;
         sum / count
     }
 
@@ -1463,9 +1464,10 @@ impl Molecule3D {
             self.positions[dihedral.3],
         );
 
-        let v3 = d - c;
-        let v2 = c - b;
+
         let v1 = b - a;
+        let v2 = c - b;
+        let v3 = d - c;
         let normal1 = v1.cross(&v2);
         let normal2 = v2.cross(&v3);
         let angle = normal1.angle_between(&normal2);
