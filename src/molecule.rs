@@ -205,6 +205,45 @@ pub trait Molecule {
         self.get_atom_charge(atom_index1)
             .cmp(&self.get_atom_charge(atom_index2))
     }
+    /// Compares the electronegativities of two atoms
+    ///
+    /// # Arguments
+    /// * 'atom1_index' - The index of the first atom.
+    /// * 'atom2_index' - The index of the second atom.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use molecules::molecule::{Molecule3D,Molecule};
+    /// let molecule = Molecule3D::from_xyz("tests/ethane.xyz");
+    /// assert_eq!(molecule.cmp_electronegativities(0, 1), std::cmp::Ordering::Equal);
+    /// ```
+    fn cmp_electronegativities(
+        &self,
+        atom1_index: usize,
+        atom2_index: usize,
+    ) -> std::cmp::Ordering {
+        self.electronegativity(atom1_index)
+            .cmp(&self.electronegativity(atom2_index))
+    }
+
+    fn electronegativity(&self, atom_index: usize) -> Option<u16> {
+        self.atomic_numbers().get(atom_index)?.electronegativity()
+    }
+
+    fn get_oxidation_state(&self, atom_index: usize) -> i8 {
+        let mut state = self.get_atom_charge(atom_index);
+        for bond in self.get_atom_bonds(atom_index).unwrap_or_default() {
+            let target = bond.target();
+            match self.cmp_electronegativities(atom_index, target) {
+                std::cmp::Ordering::Less => state -= 1,
+                std::cmp::Ordering::Greater => state += 1,
+                _ => continue,
+            }
+            
+        }
+        state
+    }
     /// This function returns the number of bonded elements of a specific type in case of invalid atom index it returns 0 to keep the api simple
     fn number_of_bonded_element(&self, atom_index: usize, element: u8) -> usize {
         let Some(bonds) = self.get_atom_bonds(atom_index) else {
@@ -1094,31 +1133,7 @@ impl Molecule3D {
         "".to_string()
     }
 
-    /// Compares the electronegativities of two atoms
-    ///
-    /// # Arguments
-    /// * 'atom1_index' - The index of the first atom.
-    /// * 'atom2_index' - The index of the second atom.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use molecules::molecule::{Molecule3D,Molecule};
-    /// let molecule = Molecule3D::from_xyz("tests/ethane.xyz");
-    /// assert_eq!(molecule.cmp_electronegativities(0, 1), std::cmp::Ordering::Equal);
-    /// ```
-    pub fn cmp_electronegativities(
-        &self,
-        atom1_index: usize,
-        atom2_index: usize,
-    ) -> std::cmp::Ordering {
-        self.electronegativity(atom1_index)
-            .cmp(&self.electronegativity(atom2_index))
-    }
 
-    pub fn electronegativity(&self, atom_index: usize) -> Option<u16> {
-        self.atomic_numbers.get(atom_index)?.electronegativity()
-    }
 
     pub fn identify_bond_changes(&self, other: &Self) -> Vec<BondChange> {
         let mut bond_changes: Vec<BondChange> = Vec::new();
