@@ -1135,7 +1135,7 @@ impl Molecule3D {
 
 
 
-    pub fn identify_bond_changes(&self, other: &Self) -> Vec<BondChange> {
+    pub fn identify_bond_changes(&self, other: &Self) -> Option<Vec<BondChange>> {
         let mut bond_changes: Vec<BondChange> = Vec::new();
         self.atom_bonds
             .iter()
@@ -1168,7 +1168,11 @@ impl Molecule3D {
                     }
                 }
             });
-        bond_changes
+        if bond_changes.is_empty() {
+            None
+        } else {
+            Some(bond_changes)
+        }
     }
 
     pub fn charge_changes(&self, other: &Molecule3D) -> Vec<(usize, i8, i8)> {
