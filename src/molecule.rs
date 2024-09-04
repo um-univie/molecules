@@ -231,13 +231,26 @@ pub trait Molecule {
         self.atomic_numbers().get(atom_index)?.electronegativity()
     }
 
+    /// This function returns the oxidation state of an atom
+    /// 
+    /// # Arguments
+    /// * 'atom_index' - The index of the atom
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use molecules::molecule::{Molecule3D,Molecule};
+    /// let molecule = Molecule3D::from_xyz("tests/ethane.xyz");
+    /// assert_eq!(molecule.get_oxidation_state(0), -3);
+    ///
+    /// ```
     fn get_oxidation_state(&self, atom_index: usize) -> i8 {
         let mut state = self.get_atom_charge(atom_index);
         for bond in self.get_atom_bonds(atom_index).unwrap_or_default() {
             let target = bond.target();
             match self.cmp_electronegativities(atom_index, target) {
-                std::cmp::Ordering::Less => state -= 1,
-                std::cmp::Ordering::Greater => state += 1,
+                std::cmp::Ordering::Less => state += 1,
+                std::cmp::Ordering::Greater => state -= 1,
                 _ => continue,
             }
             
