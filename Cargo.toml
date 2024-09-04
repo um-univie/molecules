@@ -13,7 +13,7 @@ readme = "README.md"
 [dependencies]
 chemistry_consts = "0.1.4"
 itertools = "0.12.1"
-kiddo = "4.2.1"
+kiddo = {version = "4.2.1", default_features = false, features = ["default"]}
 nohash-hasher = "0.2.0"
 petgraph = "0.6.5"
 rand = "0.8.5"
