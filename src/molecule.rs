@@ -1395,7 +1395,7 @@ impl Molecule3D {
         sum / count
     }
 
-    pub fn position(&self, atom_index: usize) -> Option<Vector> {
+    pub fn get_atom_position(&self, atom_index: usize) -> Option<Vector> {
         self.positions.get(atom_index).copied()
     }
 
