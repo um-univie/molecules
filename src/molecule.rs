@@ -1395,6 +1395,10 @@ impl Molecule3D {
         sum / count
     }
 
+    pub fn position(&self, atom_index: usize) -> Option<Vector> {
+        self.positions.get(atom_index).copied()
+    }
+
     pub fn number_of_charged_atoms(&self) -> usize {
         self.charges.iter().filter(|&&charge| charge != 0).count()
     }
@@ -2487,6 +2491,7 @@ struct BondTypeChange {
     from: BondType,
     to: BondType,
 }
+
 // Unit tests (Still needs to be improved)
 #[cfg(test)]
 mod tests {
