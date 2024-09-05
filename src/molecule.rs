@@ -78,6 +78,7 @@ impl BondTarget {
             BondType::Quadruple => 4,
             // TODO: Implement aromatic bond order
             BondType::Aromatic => 1,
+            BondType::Coordinate => 1,
         }
     }
 }
@@ -90,6 +91,7 @@ pub enum BondType {
     Triple,
     Aromatic,
     Quadruple,
+    Coordinate,
 }
 
 impl Display for BondType {
@@ -100,6 +102,8 @@ impl Display for BondType {
             BondType::Triple => write!(f, "#"),
             BondType::Aromatic => write!(f, ":"),
             BondType::Quadruple => write!(f, "$"),
+            // To be implemented
+            BondType::Coordinate => write!(f, ""),
         }
     }
 }
@@ -279,6 +283,7 @@ pub trait Molecule {
                 BondType::Triple => 6,
                 BondType::Quadruple => 8,
                 BondType::Aromatic => 3,
+                BondType::Coordinate => 2,
             })
             .sum::<i8>()
             / 2
@@ -612,6 +617,8 @@ pub trait Molecule {
             BondType::Triple => smiles.push('#'),
             BondType::Quadruple => smiles.push('$'),
             BondType::Aromatic => smiles.push('~'),
+            // To be implemented
+            BondType::Coordinate => {}
         }
         let charge = self.charges()[node.index];
         let number_of_hydrogens = self.number_of_bonded_element(node.index, 1);
@@ -1553,6 +1560,7 @@ impl Molecule3D {
                 BondType::Triple => 6,
                 BondType::Quadruple => 8,
                 BondType::Aromatic => 3,
+                BondType::Coordinate => 2,
             })
             .sum::<i8>()
             / 2
@@ -2065,6 +2073,8 @@ pub fn increase_bond(bond: &mut BondTarget) {
         BondType::Triple => bond.bond_type = BondType::Quadruple,
         BondType::Quadruple => panic!("Cannot increase bond beyond quadruple bond"),
         BondType::Aromatic => panic!("Cannot increase bond beyond aromatic bond"),
+        // TODO handle this in the case of metals
+        BondType::Coordinate => panic!("Cannot increase bond beyond coordinate bond"),
     }
 }
 
@@ -2088,6 +2098,7 @@ pub fn decrease_bond(bond: &mut BondTarget) {
         BondType::Triple => bond.bond_type = BondType::Double,
         BondType::Quadruple => bond.bond_type = BondType::Triple,
         BondType::Aromatic => bond.bond_type = BondType::Single,
+        BondType::Coordinate => panic!("Cannot decrease bond beyond coordinate bond"),
     }
 }
 

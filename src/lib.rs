@@ -6,3 +6,4 @@ pub mod molecular_formula;
 pub mod molecule;
 pub mod prelude;
 pub mod vector;
+pub mod chirality;
