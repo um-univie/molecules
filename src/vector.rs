@@ -366,6 +366,30 @@ impl Vector {
         let v2 = *end_point - *middle_point;
         v1.angle_between(&v2)
     }
+    /// Calculates the triple product of three vectors
+    ///
+    /// # Example
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let start_point = Vector::new(1.0,0.0,0.0); 
+    /// let middle_point = Vector::new(0.0,1.0,0.0);
+    /// let end_point = Vector::new(0.0,0.0,1.0);
+    /// // Should be ~1 (right handed)
+    /// let triple_product = start_point.triple_product(&middle_point, &end_point);
+    /// assert!(triple_product - 1.0 < 0.01);
+    ///
+    /// let start_point = Vector::new(1.0,0.0,0.0); 
+    /// let middle_point = Vector::new(0.0,0.0,1.0);
+    /// let end_point = Vector::new(0.0,1.0,0.0);
+    ///
+    /// // Should be ~ -1 (right handed)
+    /// let triple_product = start_point.triple_product(&middle_point, &end_point);
+    /// assert!(triple_product + 1.0 < 0.01);
+    /// ```
+    pub fn triple_product(&self, other1: &Vector, other2: &Vector) -> f64 {
+        self.dot(&other1.cross(other2))
+    }
     pub fn as_tuple(&self) -> (f64, f64, f64) {
         (self.x, self.y, self.z)
     }
