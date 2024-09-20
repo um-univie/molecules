@@ -1,5 +1,5 @@
 use rand::Rng;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, Neg};
 
 /// A 3D vector represented by its x, y, and z components.
 ///
@@ -199,11 +199,77 @@ impl Vector {
     ///
     /// ```
     pub fn length(&self) -> f64 {
-        (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+        (self.squared_length()).sqrt()
     }
+
+    /// Alias for length. Returns the magnitude of the vector.
+    ///
+    /// # Returns
+    ///
+    /// * `f64` - The magnitude (length) of the vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v = Vector::new(3.0, 4.0, 0.0);
+    /// assert_eq!(v.magnitude(), 5.0);
+    /// ```
+    pub fn magnitude(&self) -> f64 {
+        self.length()
+    }
+    
+    /// Calculates the squared length of the vector.
+    ///
+    /// This is more efficient than `length()` when you only need to compare lengths,
+    /// as it avoids the square root calculation.
+    ///
+    /// # Returns
+    ///
+    /// * `f64` - The squared length of the vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v = Vector::new(1.0, 2.0, 2.0);
+    /// assert_eq!(v.squared_length(), 9.0);
+    /// ```
     pub fn squared_length(&self) -> f64 {
         self.x.powi(2) + self.y.powi(2) + self.z.powi(2)
     }
+
+    /// Determines if two vectors are parallel within a given tolerance.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The other vector to compare with.
+    /// * `tolerance` - The tolerance for parallelism. Smaller values require more precise parallelism.
+    ///
+    /// # Returns
+    ///
+    /// * `bool` - True if the vectors are parallel within the given tolerance, false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(1.0, 0.0, 0.0);
+    /// let v2 = Vector::new(2.0, 0.0, 0.0);
+    /// assert!(v1.are_vectors_parallel(&v2, 1e-10));
+    ///
+    /// let v3 = Vector::new(1.0, 0.1, 0.0);
+    /// assert!(!v1.are_vectors_parallel(&v3, 1e-10));
+    /// ```
+    pub fn are_vectors_parallel(&self, other: &Vector, tolerance: f64) -> bool {
+        let cross_product = self.cross(other);
+        cross_product.length() < tolerance * self.length() * other.length()
+    }
+
+
     /// Calculates the dot product of two vectors.
     ///
     /// # Panics
@@ -347,6 +413,7 @@ impl Vector {
             *self / self.length()
         }
     }
+
     /// Calculates the angle given three points in the order, start, middle, end
     ///
     /// # Panics
@@ -372,14 +439,14 @@ impl Vector {
     /// ```
     /// use molecules::vector::Vector;
     ///
-    /// let start_point = Vector::new(1.0,0.0,0.0); 
+    /// let start_point = Vector::new(1.0,0.0,0.0);
     /// let middle_point = Vector::new(0.0,1.0,0.0);
     /// let end_point = Vector::new(0.0,0.0,1.0);
     /// // Should be ~1 (right handed)
     /// let triple_product = start_point.triple_product(&middle_point, &end_point);
     /// assert!(triple_product - 1.0 < 0.01);
     ///
-    /// let start_point = Vector::new(1.0,0.0,0.0); 
+    /// let start_point = Vector::new(1.0,0.0,0.0);
     /// let middle_point = Vector::new(0.0,0.0,1.0);
     /// let end_point = Vector::new(0.0,1.0,0.0);
     ///
@@ -398,5 +465,69 @@ impl Vector {
     }
     pub fn as_vec(&self) -> Vec<f64> {
         vec![self.x, self.y, self.z]
+    }
+
+    /// Determines if two vectors are pointing in opposite directions within a given tolerance.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The other vector to compare with.
+    /// * `tolerance` - The tolerance for the comparison. Smaller values require more precise opposition.
+    ///
+    /// # Returns
+    //
+    /// * `bool` - True if the vectors are opposite within the given tolerance, false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(1.0, 0.0, 0.0);
+    /// let v2 = Vector::new(-1.0, 0.0, 0.0);
+    /// assert!(v1.is_opposite(&v2, 1e-10));
+    ///
+    /// let v3 = Vector::new(-0.99, 0.01, 0.0);
+    /// assert!(!v1.is_opposite(&v3, 1e-10));
+    /// assert!(v1.is_opposite(&v3, 0.02));
+    /// ```
+    pub fn is_opposite(&self, other: &Vector, tolerance: f64) -> bool {
+        let dot_product = self.dot(other);
+        let magnitudes_product = self.length() * other.length();
+        
+        if magnitudes_product == 0.0 {
+            false // At least one vector is zero, so they can't be opposite
+        } else {
+            let cos_angle = dot_product / magnitudes_product;
+            (cos_angle + 1.0).abs() < tolerance
+        }
+    }
+}
+
+// Implement the Neg trait for Vector
+impl Neg for Vector {
+    type Output = Vector;
+
+    /// Negates the vector, reversing its direction.
+    ///
+    /// # Returns
+    ///
+    /// * `Vector` - A new Vector with all components negated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v = Vector::new(1.0, -2.0, 3.0);
+    /// let negated = -v;
+    /// assert_eq!(negated, Vector::new(-1.0, 2.0, -3.0));
+    /// ```
+    fn neg(self) -> Self::Output {
+        Vector {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
     }
 }
