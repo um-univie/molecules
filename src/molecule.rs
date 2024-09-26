@@ -1,6 +1,9 @@
-use crate::atom::Atom;
-use crate::consts::BOND_TOLERANCE;
-use crate::vector::Vector;
+use crate::{
+    atom::Atom,
+    bond::{BondOrder,BondTarget},
+    chirality::ChiralClass,
+    consts::BOND_TOLERANCE,
+    vector::Vector};
 use chemistry_consts::ElementProperties;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
@@ -9,6 +12,7 @@ use nohash_hasher::{IntMap, IntSet};
 use petgraph::algo::subgraph_isomorphisms_iter;
 use petgraph::prelude::*;
 use rayon::prelude::*;
+use tinyvec::{ArrayVec, array_vec};
 
 use std::{
     collections::{HashSet, VecDeque},
@@ -18,95 +22,6 @@ use std::{
     num::ParseFloatError,
     path::Path,
 };
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
-pub enum ChiralClass {
-    S,
-    R,
-    AL(u8),
-    SP(u8),
-    TB(u8),
-    OH(u8),
-    #[default]
-    None,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
-pub struct BondTarget {
-    target: usize,
-    bond_type: BondType,
-}
-
-impl BondTarget {
-    pub fn new(target: usize, bond_type: BondType) -> BondTarget {
-        BondTarget { target, bond_type }
-    }
-    fn single(target: usize) -> BondTarget {
-        BondTarget {
-            target,
-            bond_type: BondType::Single,
-        }
-    }
-    fn double(target: usize) -> BondTarget {
-        BondTarget {
-            target,
-            bond_type: BondType::Double,
-        }
-    }
-    fn triple(target: usize) -> BondTarget {
-        BondTarget {
-            target,
-            bond_type: BondType::Triple,
-        }
-    }
-    fn aromatic(target: usize) -> BondTarget {
-        BondTarget {
-            target,
-            bond_type: BondType::Aromatic,
-        }
-    }
-    pub fn bond_type(&self) -> BondType {
-        self.bond_type
-    }
-    pub fn target(&self) -> usize {
-        self.target
-    }
-    pub fn order(&self) -> u8 {
-        match self.bond_type {
-            BondType::Single => 1,
-            BondType::Double => 2,
-            BondType::Triple => 3,
-            BondType::Quadruple => 4,
-            // TODO: Implement aromatic bond order
-            BondType::Aromatic => 1,
-            BondType::Coordinate => 1,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
-pub enum BondType {
-    #[default]
-    Single,
-    Double,
-    Triple,
-    Aromatic,
-    Quadruple,
-    Coordinate,
-}
-
-impl Display for BondType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BondType::Single => write!(f, "-"),
-            BondType::Double => write!(f, "="),
-            BondType::Triple => write!(f, "#"),
-            BondType::Aromatic => write!(f, ":"),
-            BondType::Quadruple => write!(f, "$"),
-            // To be implemented
-            BondType::Coordinate => write!(f, ""),
-        }
-    }
-}
 
 /// This function   
 #[derive(Debug, Default, Clone)]
@@ -118,7 +33,7 @@ pub struct Molecule2D {
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
     radical_states: Vec<bool>,
-    atom_bonds: Vec<Vec<BondTarget>>,
+    atom_bonds: Vec<ArrayVec<[BondTarget;10]>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -130,13 +45,13 @@ pub struct Molecule3D {
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
     pub positions: Vec<Vector>,
-    radical_states: Vec<bool>,
-    atom_bonds: Vec<Vec<BondTarget>>,
+    pub radical_states: Vec<bool>,
+    pub atom_bonds: Vec<ArrayVec::<[BondTarget;10]>>,
 }
 
 pub trait Molecule {
-    fn atom_bonds(&self) -> &Vec<Vec<BondTarget>>;
-    fn atom_bonds_mut(&mut self) -> &mut Vec<Vec<BondTarget>>;
+    fn atom_bonds(&self) -> &Vec<ArrayVec<[BondTarget;10]>>;
+    fn atom_bonds_mut(&mut self) -> &mut Vec<ArrayVec<[BondTarget;10]>>;
     fn atomic_numbers(&self) -> &[u8];
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8>;
     fn chiral_classes(&self) -> Option<&[ChiralClass]>;
@@ -236,7 +151,7 @@ pub trait Molecule {
     }
 
     /// This function returns the oxidation state of an atom
-    /// 
+    ///
     /// # Arguments
     /// * 'atom_index' - The index of the atom
     ///
@@ -257,7 +172,6 @@ pub trait Molecule {
                 std::cmp::Ordering::Greater => state -= 1,
                 _ => continue,
             }
-            
         }
         state
     }
@@ -277,13 +191,13 @@ pub trait Molecule {
     fn actual_valency(&self, atom_index: usize) -> i8 {
         self.atom_bonds()[atom_index]
             .iter()
-            .map(|bond| match bond.bond_type() {
-                BondType::Single => 2,
-                BondType::Double => 4,
-                BondType::Triple => 6,
-                BondType::Quadruple => 8,
-                BondType::Aromatic => 3,
-                BondType::Coordinate => 2,
+            .map(|bond| match bond.bond_order() {
+                BondOrder::Single => 2,
+                BondOrder::Double => 4,
+                BondOrder::Triple => 6,
+                BondOrder::Quadruple => 8,
+                BondOrder::Aromatic => 3,
+                BondOrder::Coordinate => 2,
             })
             .sum::<i8>()
             / 2
@@ -360,14 +274,14 @@ pub trait Molecule {
             })
             .collect()
     }
-    fn get_edges_with_type(&self) -> Vec<(usize, usize, BondType)> {
+    fn get_edges_with_type(&self) -> Vec<(usize, usize, BondOrder)> {
         self.atom_bonds()
             .iter()
             .enumerate()
             .flat_map(|(atom_index, bonds)| {
                 bonds.iter().map(move |bond| {
                     if atom_index < bond.target() {
-                        Some((atom_index, bond.target(), bond.bond_type()))
+                        Some((atom_index, bond.target(), bond.bond_order()))
                     } else {
                         None
                     }
@@ -424,10 +338,21 @@ pub trait Molecule {
     fn match_submolecule(&self, other: &Self) -> Option<Vec<IntMap<usize, usize>>> {
         let mut self_components = self.get_components();
         let mut other_components = other.get_components();
-        if self.atomic_numbers().iter().zip(other.atomic_numbers()).all(|(a, b)| a == b) 
-            && self.atom_bonds().iter().zip(other.atom_bonds()).all(|(a, b)| a == b) && self.len() == other.len()
+        if self
+            .atomic_numbers()
+            .iter()
+            .zip(other.atomic_numbers())
+            .all(|(a, b)| a == b)
+            && self
+                .atom_bonds()
+                .iter()
+                .zip(other.atom_bonds())
+                .all(|(a, b)| a == b)
+            && self.len() == other.len()
         {
-            return Some(vec![(0..self.number_of_atoms()).map(|index| (index,index)).collect()]);
+            return Some(vec![(0..self.number_of_atoms())
+                .map(|index| (index, index))
+                .collect()]);
         }
 
         self_components.retain(|component| component.len() > 1);
@@ -481,7 +406,9 @@ pub trait Molecule {
     }
 
     fn get_atom_bonds(&self, atom_index: usize) -> Option<&[BondTarget]> {
-        self.atom_bonds().get(atom_index).map(|bonds| bonds.as_slice())
+        self.atom_bonds()
+            .get(atom_index)
+            .map(|bonds| bonds.as_slice())
     }
     fn traverse_component(
         &self,
@@ -496,7 +423,10 @@ pub trait Molecule {
         while let Some(index) = stack.pop() {
             current_component.push(index);
             let Some(bonds) = self.get_atom_bonds(index) else {
-                println!("No bonds found for atom {}, this means an out of bounds access", index);
+                println!(
+                    "No bonds found for atom {}, this means an out of bounds access",
+                    index
+                );
                 continue;
             };
             for &bond in bonds {
@@ -514,10 +444,10 @@ pub trait Molecule {
     fn build_smiles_tree(
         &self,
         start_index: usize,
-        bond_type: BondType,
+        bond_type: BondOrder,
         parent_index: Option<usize>,
         visited: &mut Vec<bool>,
-        ring_closures: &mut IntMap<usize, Vec<(usize, BondType)>>,
+        ring_closures: &mut IntMap<usize, Vec<(usize, BondOrder)>>,
         ring_counter: &mut usize,
     ) -> Node {
         let mut root = Node::new(start_index, bond_type);
@@ -536,20 +466,20 @@ pub trait Molecule {
                 if neighbor.target() < start_index {
                     continue;
                 }
-                let bond_type = neighbor.bond_type();
+                let bond_type = neighbor.bond_order();
                 ring_closures
                     .entry(start_index)
                     .or_default()
                     .push((*ring_counter, bond_type));
                 ring_closures
-                    .entry(neighbor.target)
+                    .entry(neighbor.target())
                     .or_default()
                     .push((*ring_counter, bond_type));
                 *ring_counter += 1;
             } else {
                 let child = self.build_smiles_tree(
-                    neighbor.target,
-                    neighbor.bond_type(),
+                    neighbor.target(),
+                    neighbor.bond_order(),
                     Some(start_index),
                     visited,
                     ring_closures,
@@ -568,9 +498,9 @@ pub trait Molecule {
             return 0;
         };
         for bond in bonds {
-            if bond.bond_type() == BondType::Double || bond.bond_type() == BondType::Aromatic {
+            if bond.bond_order() == BondOrder::Double || bond.bond_order() == BondOrder::Aromatic {
                 number_of_pi_electrons += 2;
-            } else if bond.bond_type() == BondType::Triple {
+            } else if bond.bond_order() == BondOrder::Triple {
                 number_of_pi_electrons += 4;
             }
         }
@@ -591,7 +521,7 @@ pub trait Molecule {
             let mut visited = vec![false; self.atomic_numbers().len()];
             let root = self.build_smiles_tree(
                 component[0],
-                BondType::Single,
+                BondOrder::Single,
                 None,
                 &mut visited,
                 ring_closures,
@@ -608,17 +538,17 @@ pub trait Molecule {
     fn construct_smiles(
         &self,
         node: &Node,
-        ring_closures: &IntMap<usize, Vec<(usize, BondType)>>,
+        ring_closures: &IntMap<usize, Vec<(usize, BondOrder)>>,
     ) -> String {
         let mut smiles = String::new();
         match node.bond_type {
-            BondType::Single => {}
-            BondType::Double => smiles.push('='),
-            BondType::Triple => smiles.push('#'),
-            BondType::Quadruple => smiles.push('$'),
-            BondType::Aromatic => smiles.push('~'),
+            BondOrder::Single => {}
+            BondOrder::Double => smiles.push('='),
+            BondOrder::Triple => smiles.push('#'),
+            BondOrder::Quadruple => smiles.push('$'),
+            BondOrder::Aromatic => smiles.push('~'),
             // To be implemented
-            BondType::Coordinate => {}
+            BondOrder::Coordinate => {}
         }
         let charge = self.charges()[node.index];
         let number_of_hydrogens = self.number_of_bonded_element(node.index, 1);
@@ -651,7 +581,7 @@ pub trait Molecule {
 
         if let Some(closures) = ring_closures.get(&node.index) {
             for closure in closures {
-                if closure.1 == BondType::Single {
+                if closure.1 == BondOrder::Single {
                     smiles.push_str(&format!("{}", closure.0));
                 } else {
                     smiles.push_str(&format!("{}{}", closure.1, closure.0));
@@ -671,7 +601,7 @@ pub trait Molecule {
         smiles
     }
     /// This function returns the rings in the molecule
-    /// 
+    ///
     /// # Examples
     /// use molecules::prelude::*;
     /// let molecule = Molecule3D::from_smiles("C1CCCCC1CC2CCCCC2");
@@ -686,7 +616,14 @@ pub trait Molecule {
 
         for start in 0..self.atomic_numbers().len() {
             if !visited[start] {
-                self.dfs_find_rings(start, start, &mut visited, &mut path, &mut path_set, &mut rings);
+                self.dfs_find_rings(
+                    start,
+                    start,
+                    &mut visited,
+                    &mut path,
+                    &mut path_set,
+                    &mut rings,
+                );
             }
         }
 
@@ -723,10 +660,10 @@ pub trait Molecule {
 }
 
 impl Molecule for Molecule3D {
-    fn atom_bonds(&self) -> &Vec<Vec<BondTarget>> {
+    fn atom_bonds(&self) -> &Vec<ArrayVec<[BondTarget;10]>> {
         &self.atom_bonds
     }
-    fn atom_bonds_mut(&mut self) -> &mut Vec<Vec<BondTarget>> {
+    fn atom_bonds_mut(&mut self) -> &mut Vec<ArrayVec<[BondTarget;10]>> {
         &mut self.atom_bonds
     }
     fn atom_classes(&self) -> &Option<Vec<u8>> {
@@ -747,7 +684,7 @@ impl Molecule for Molecule3D {
     fn atomic_numbers_mut(&mut self) -> &mut Vec<u8> {
         &mut self.atomic_numbers
     }
-    
+
     fn chiral_classes(&self) -> Option<&[ChiralClass]> {
         self.chiral_classes.as_deref()
     }
@@ -789,7 +726,7 @@ impl Molecule for Molecule3D {
             let number_of_hydrogens = -degree;
             for _ in 0..number_of_hydrogens {
                 self.atomic_numbers.push(1);
-                self.atom_bonds.push(Vec::from([BondTarget::single(index)]));
+                self.atom_bonds.push(array_vec!([BondTarget;10] => BondTarget::single(index)));
                 self.atom_bonds[index].push(BondTarget::single(self.atomic_numbers.len() - 1));
             }
         });
@@ -803,10 +740,10 @@ impl Molecule for Molecule3D {
 }
 
 impl Molecule for Molecule2D {
-    fn atom_bonds(&self) -> &Vec<Vec<BondTarget>> {
+    fn atom_bonds(&self) -> &Vec<ArrayVec<[BondTarget;10]>> {
         &self.atom_bonds
     }
-    fn atom_bonds_mut(&mut self) -> &mut Vec<Vec<BondTarget>> {
+    fn atom_bonds_mut(&mut self) -> &mut Vec<ArrayVec<[BondTarget;10]>> {
         &mut self.atom_bonds
     }
     fn atom_classes(&self) -> &Option<Vec<u8>> {
@@ -859,7 +796,7 @@ impl Molecule for Molecule2D {
                 let hydrogen_index = self.atomic_numbers.len();
                 self.atomic_numbers_mut().push(1);
                 self.atom_bonds_mut()
-                    .push(Vec::from([BondTarget::single(index)]));
+                    .push(array_vec!([BondTarget;10] => BondTarget::single(index)));
                 self.atom_bonds_mut()[index].push(BondTarget::single(hydrogen_index));
             }
         });
@@ -1035,7 +972,7 @@ impl MolecularSystem {
 }
 
 impl Molecule3D {
-    pub fn atom_bonds_mut(&mut self, atom_index: usize) -> &mut Vec<BondTarget> {
+    pub fn atom_bonds_mut(&mut self, atom_index: usize) -> &mut ArrayVec<[BondTarget;10]> {
         &mut self.atom_bonds[atom_index]
     }
 
@@ -1075,7 +1012,8 @@ impl Molecule3D {
 
     pub fn add_atom(&mut self, atom: Atom) {
         self.atomic_numbers.push(atom.atomic_number);
-        self.positions.push(atom.position_vector.unwrap_or_default());
+        self.positions
+            .push(atom.position_vector.unwrap_or_default());
         self.charges.push(atom.charge);
         self.radical_states.push(atom.is_radical);
         self.atom_bonds.push(atom.bonds);
@@ -1088,7 +1026,7 @@ impl Molecule3D {
     }
 
     // This function returns a reference to outgoing bonds of an atom
-    pub fn atom_bonds(&self) -> &Vec<Vec<BondTarget>> {
+    pub fn atom_bonds(&self) -> &Vec<ArrayVec<[BondTarget;10]>> {
         &self.atom_bonds
     }
     /// Creates a new molecule from an xyz file
@@ -1152,8 +1090,6 @@ impl Molecule3D {
 
         "".to_string()
     }
-
-
 
     pub fn identify_bond_changes(&self, other: &Self) -> Option<Vec<BondChange>> {
         let mut bond_changes: Vec<BondChange> = Vec::new();
@@ -1238,12 +1174,12 @@ impl Molecule3D {
                             .iter()
                             .find(|other_bond| other_bond.target() == self_bond.target())
                             .and_then(|other_bond| {
-                                if self_bond.bond_type() != other_bond.bond_type() {
+                                if self_bond.bond_order() != other_bond.bond_order() {
                                     Some(BondTypeChange {
                                         atom_index: index,
                                         target: self_bond.target(),
-                                        from: self_bond.bond_type(),
-                                        to: other_bond.bond_type(),
+                                        from: self_bond.bond_order(),
+                                        to: other_bond.bond_order(),
                                     })
                                 } else {
                                     None
@@ -1254,9 +1190,10 @@ impl Molecule3D {
             })
             .collect()
     }
-    pub fn identify_bonds(&mut self, tolerance: f64){
+    pub fn identify_bonds(&mut self, tolerance: f64) {
         // The threshold is dynamically determined by the largest covalent radius in the molecule
-        let threshold_squared = (self.atomic_numbers
+        let threshold_squared = (self
+            .atomic_numbers
             .iter()
             .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
                 prev.max(atomic_number.covalent_radius().unwrap_or_default())
@@ -1288,25 +1225,30 @@ impl Molecule3D {
                             None
                         }
                     })
-                    .collect::<Vec<BondTarget>>();
-                bonds.sort_by_key(|bond| bond.target);
+                    .collect::<ArrayVec<[BondTarget;10]>>();
+                bonds.sort_by_key(|bond| bond.target());
                 bonds
             })
-            .collect::<Vec<Vec<BondTarget>>>();
+            .collect::<Vec<ArrayVec<[BondTarget;10]>>>();
         self.atom_bonds = bonds;
     }
 
-
-    pub fn identify_bonds_alternate_covalent_radii(&mut self, covalent_radii: &[f64], tolerance: f64){
+    pub fn identify_bonds_alternate_covalent_radii(
+        &mut self,
+        covalent_radii: &[f64],
+        tolerance: f64,
+    ) {
         // The threshold is dynamically determined by the largest covalent radius in the molecule
-        let threshold_squared = (self.atomic_numbers
-            .iter()
-            .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
-                let covalent_radius = covalent_radii.get(atomic_number as usize);
-                prev.max(*covalent_radius.unwrap_or(&0.0))
-            })
-            * 3.0)
-            .powi(2);
+        let threshold_squared =
+            (self
+                .atomic_numbers
+                .iter()
+                .fold(f64::NEG_INFINITY, |prev, &atomic_number| {
+                    let covalent_radius = covalent_radii.get(atomic_number as usize);
+                    prev.max(*covalent_radius.unwrap_or(&0.0))
+                })
+                * 3.0)
+                .powi(2);
         let kdtree = self.build_tree();
         let bonds = self
             .positions
@@ -1332,18 +1274,20 @@ impl Molecule3D {
                             return None;
                         }
 
-                        let is_bonded = distance < ((covalent_radius1.unwrap() + covalent_radius2.unwrap()) * tolerance).powi(2);
+                        let is_bonded = distance
+                            < ((covalent_radius1.unwrap() + covalent_radius2.unwrap()) * tolerance)
+                                .powi(2);
                         if is_bonded {
                             Some(BondTarget::single(neighbor.item as usize))
                         } else {
                             None
                         }
                     })
-                    .collect::<Vec<BondTarget>>();
-                bonds.sort_by_key(|bond| bond.target);
+                    .collect::<ArrayVec<[BondTarget;10]>>();
+                bonds.sort_by_key(|bond| bond.target());
                 bonds
             })
-            .collect::<Vec<Vec<BondTarget>>>();
+            .collect::<Vec<ArrayVec<[BondTarget;10]>>>();
         self.atom_bonds = bonds;
     }
 
@@ -1454,7 +1398,7 @@ impl Molecule3D {
     // PROTOTYPE
     pub fn dihedrals(&mut self) -> Vec<((usize, usize, usize, usize), f64)> {
         let bond_angles = self.find_angles();
-        let dihedrals: Vec<((usize,usize,usize,usize),f64)>= bond_angles
+        let dihedrals: Vec<((usize, usize, usize, usize), f64)> = bond_angles
             .iter()
             .flat_map(|angle| {
                 let (atom1, atom2, atom3) = angle.atoms;
@@ -1507,7 +1451,6 @@ impl Molecule3D {
             self.positions[dihedral.3],
         );
 
-
         let v1 = b - a;
         let v2 = c - b;
         let v3 = d - c;
@@ -1541,7 +1484,11 @@ impl Molecule3D {
         let expected_valency = atomic_number.valencies()?.next()?;
         let actual_valency = self.actual_valency(atom_index);
         // May need to be changed for elements with unknown valencies
-        Some(actual_valency - expected_valency + self.get_charge(atom_index).abs() + self.is_atom_radical(atom_index) as i8)
+        Some(
+            actual_valency - expected_valency
+                + self.get_charge(atom_index).abs()
+                + self.is_atom_radical(atom_index) as i8,
+        )
     }
     /// Return the actual valency of the atom based on the number of bonds
     ///
@@ -1554,13 +1501,13 @@ impl Molecule3D {
     pub fn actual_valency(&self, atom_index: usize) -> i8 {
         self.atom_bonds[atom_index]
             .iter()
-            .map(|bond| match bond.bond_type() {
-                BondType::Single => 2,
-                BondType::Double => 4,
-                BondType::Triple => 6,
-                BondType::Quadruple => 8,
-                BondType::Aromatic => 3,
-                BondType::Coordinate => 2,
+            .map(|bond| match bond.bond_order() {
+                BondOrder::Single => 2,
+                BondOrder::Double => 4,
+                BondOrder::Triple => 6,
+                BondOrder::Quadruple => 8,
+                BondOrder::Aromatic => 3,
+                BondOrder::Coordinate => 2,
             })
             .sum::<i8>()
             / 2
@@ -1952,12 +1899,12 @@ struct SmilesParameters {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     index: usize,
-    bond_type: BondType,
+    bond_type: BondOrder,
     children: Vec<Node>,
 }
 
 impl Node {
-    fn new(index: usize, bond_type: BondType) -> Self {
+    fn new(index: usize, bond_type: BondOrder) -> Self {
         Node {
             index,
             bond_type,
@@ -1983,7 +1930,7 @@ fn backtrack_bonding(molecule: &mut Molecule3D, degrees: &mut [i8]) -> bool {
 
     let number_of_double_bonds = molecule.atom_bonds[unsatisfied_atom_index]
         .iter()
-        .filter(|&bond| bond.bond_type == BondType::Double)
+        .filter(|&bond| bond.bond_order == BondOrder::Double)
         .count();
 
     // If there are more than two unsatisfied atoms and an atom already has a double bond then we need to find the next unsatisfied atom
@@ -1999,7 +1946,7 @@ fn backtrack_bonding(molecule: &mut Molecule3D, degrees: &mut [i8]) -> bool {
     for &neighbor in &molecule.atom_bonds[unsatisfied_atom_index].clone() {
         let number_of_neighbor_atom_double_bonds = molecule.atom_bonds[neighbor.target]
             .iter()
-            .filter(|bond| bond.bond_type == BondType::Double)
+            .filter(|bond| bond.bond_order == BondOrder::Double)
             .count();
 
         if can_increase_bond(unsatisfied_atom_index, neighbor.target, degrees)
@@ -2029,7 +1976,7 @@ pub fn relaxed_backtrack_bonding(molecule: &mut Molecule3D, degrees: &mut [i8]) 
     for &neighbor in &molecule.atom_bonds[unsatisfied_atom_index].clone() {
         let number_of_neighbor_atom_double_bonds = molecule.atom_bonds[neighbor.target]
             .iter()
-            .filter(|bond| bond.bond_type == BondType::Double)
+            .filter(|bond| bond.bond_order == BondOrder::Double)
             .count();
 
         if can_increase_bond(unsatisfied_atom_index, neighbor.target, degrees)
@@ -2066,15 +2013,15 @@ pub fn increase_bonds(molecule: &mut Molecule3D, atom_index: usize, neighbor_ind
 }
 
 pub fn increase_bond(bond: &mut BondTarget) {
-    match bond.bond_type {
-        BondType::Single => bond.bond_type = BondType::Double,
-        BondType::Double => bond.bond_type = BondType::Triple,
+    match bond.bond_order {
+        BondOrder::Single => bond.bond_order = BondOrder::Double,
+        BondOrder::Double => bond.bond_order = BondOrder::Triple,
         // TODO handle this in the case of metals
-        BondType::Triple => bond.bond_type = BondType::Quadruple,
-        BondType::Quadruple => panic!("Cannot increase bond beyond quadruple bond"),
-        BondType::Aromatic => panic!("Cannot increase bond beyond aromatic bond"),
+        BondOrder::Triple => bond.bond_order = BondOrder::Quadruple,
+        BondOrder::Quadruple => panic!("Cannot increase bond beyond quadruple bond"),
+        BondOrder::Aromatic => panic!("Cannot increase bond beyond aromatic bond"),
         // TODO handle this in the case of metals
-        BondType::Coordinate => panic!("Cannot increase bond beyond coordinate bond"),
+        BondOrder::Coordinate => panic!("Cannot increase bond beyond coordinate bond"),
     }
 }
 
@@ -2092,13 +2039,13 @@ pub fn decrease_bonds(molecule: &mut Molecule3D, atom_index: usize, neighbor_ind
 }
 
 pub fn decrease_bond(bond: &mut BondTarget) {
-    match bond.bond_type {
-        BondType::Single => panic!("Cannot decrease bond beyond single bond"),
-        BondType::Double => bond.bond_type = BondType::Single,
-        BondType::Triple => bond.bond_type = BondType::Double,
-        BondType::Quadruple => bond.bond_type = BondType::Triple,
-        BondType::Aromatic => bond.bond_type = BondType::Single,
-        BondType::Coordinate => panic!("Cannot decrease bond beyond coordinate bond"),
+    match bond.bond_order {
+        BondOrder::Single => panic!("Cannot decrease bond beyond single bond"),
+        BondOrder::Double => bond.bond_order = BondOrder::Single,
+        BondOrder::Triple => bond.bond_order = BondOrder::Double,
+        BondOrder::Quadruple => bond.bond_order = BondOrder::Triple,
+        BondOrder::Aromatic => bond.bond_order = BondOrder::Single,
+        BondOrder::Coordinate => panic!("Cannot decrease bond beyond coordinate bond"),
     }
 }
 
@@ -2335,12 +2282,12 @@ impl Molecule3D {
         while let Some(current_node) = queue.pop_front() {
             if let Some(bonds) = self.atom_bonds.get(current_node) {
                 // Extract necessary information about neighbors
-                let mut neighbors_info: Vec<(usize, u8, BondType)> = bonds
+                let mut neighbors_info: Vec<(usize, u8, BondOrder)> = bonds
                     .iter()
                     .map(|bond| {
                         let target = bond.target();
                         let atomic_number = self.atomic_numbers[target];
-                        let bond_type = bond.bond_type();
+                        let bond_type = bond.bond_order();
                         (target, atomic_number, bond_type)
                     })
                     .collect();
@@ -2404,7 +2351,7 @@ impl Molecule3D {
             .map(|atom| atom.position_vector.unwrap_or_default())
             .collect();
 
-        let mut chirals =None;
+        let mut chirals = None;
         if atoms
             .iter()
             .any(|atom| atom.chiral_class != ChiralClass::None)
@@ -2499,8 +2446,8 @@ fn order_by_degree(degrees: &[usize]) -> Vec<usize> {
 struct BondTypeChange {
     atom_index: usize,
     target: usize,
-    from: BondType,
-    to: BondType,
+    from: BondOrder,
+    to: BondOrder,
 }
 
 // Unit tests (Still needs to be improved)
@@ -2571,7 +2518,10 @@ mod tests {
         let atom1 = Atom::new(6).with_position((1.7, 0.0, 0.0));
         let atom2 = Atom::new(6).with_position((0.0, 0.0, 0.0));
         let atom3 = Atom::new(6).with_position((0.0, 0.0, 1.7));
-        let molecule = Molecule3D::from_atoms_alternate_covalent_radii(vec![atom1, atom2, atom3], &COVALENT_RADII);
+        let molecule = Molecule3D::from_atoms_alternate_covalent_radii(
+            vec![atom1, atom2, atom3],
+            &COVALENT_RADII,
+        );
         let angles = molecule.find_angles();
         println!("{:?}", angles);
         for bonds in molecule.atom_bonds.iter() {
@@ -2579,7 +2529,6 @@ mod tests {
         }
         assert_eq!(angles.len(), 1);
         assert_eq!(angles[0].angle, std::f64::consts::FRAC_PI_2);
-
     }
 }
 

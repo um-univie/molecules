@@ -1,6 +1,9 @@
-use crate::molecule::{BondTarget, BondType, ChiralClass};
-use crate::vector::Vector;
+use crate::{
+vector::Vector,
+bond::{BondTarget,BondOrder},
+chirality::ChiralClass};
 use chemistry_consts::ElementProperties;
+use tinyvec::ArrayVec;
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Atom {
@@ -11,7 +14,7 @@ pub struct Atom {
     pub chiral_class: ChiralClass,
     pub atom_class: Option<u8>,
     pub position_vector: Option<Vector>,
-    pub bonds: Vec<BondTarget>,
+    pub bonds: ArrayVec<[BondTarget;10]>,
 }
 
 impl Atom {
@@ -68,6 +71,23 @@ impl Atom {
         }
     }
 
+    fn from_sdf_line(line: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 4 {
+            return Err("Invalid atom line".into());
+        }
+        let position_vector = Some(Vector {
+            x: parts[0].parse()?,
+            y: parts[1].parse()?,
+            z: parts[2].parse()?,
+        });
+        Ok(Atom {
+            position_vector,
+            atomic_number: parts[3].to_uppercase().as_str().atomic_number().ok_or("Could not find atomic number")?,
+            ..Default::default()
+        })
+    }
+
     /// Returns the expected valency of the atom based on its atomic number
     ///
     /// # Examples
@@ -85,7 +105,7 @@ impl Atom {
         self.electronegativity().cmp(&other.electronegativity())
     }
 
-    pub fn bonds(&self) -> &Vec<BondTarget> {
+    pub fn bonds(&self) -> &ArrayVec<[BondTarget;10]> {
         &self.bonds
     }
 
@@ -100,7 +120,7 @@ impl Atom {
     pub fn is_aromatic(&self) -> bool {
         self.bonds
             .iter()
-            .any(|bond| bond.bond_type() == BondType::Aromatic)
+            .any(|bond| bond.bond_order() == BondOrder::Aromatic)
     }
 
     pub fn set_charge(&mut self, charge: i8) {
@@ -225,12 +245,13 @@ impl Atom {
     pub fn actual_valency(&self) -> i8 {
         self.bonds
             .iter()
-            .map(|bond| match bond.bond_type() {
-                BondType::Single => 2,
-                BondType::Double => 4,
-                BondType::Triple => 6,
-                BondType::Quadruple => 8,
-                BondType::Aromatic => 3,
+            .map(|bond| match bond.bond_order() {
+                BondOrder::Single => 2,
+                BondOrder::Double => 4,
+                BondOrder::Triple => 6,
+                BondOrder::Quadruple => 8,
+                BondOrder::Aromatic => 3,
+                BondOrder::Coordinate => 2,
             })
             .sum::<i8>()
             / 2

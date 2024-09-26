@@ -1,5 +1,9 @@
 use crate::atom::Atom;
-pub use crate::molecule::{BondTarget, BondType, ChiralClass, Molecule, Molecule2D};
+pub use crate::{
+            molecule::{Molecule, Molecule2D},
+            bond::{BondTarget,BondOrder},
+            chirality::ChiralClass
+            };
 pub use chemistry_consts::ElementProperties;
 pub use nohash_hasher::IntMap;
 
@@ -20,14 +24,14 @@ pub enum ParseError {
 #[derive(Default)]
 pub struct SMILESParser {
     atoms: Vec<Atom>,
-    bonds: Vec<(usize, usize, BondType)>,
+    bonds: Vec<(usize, usize, BondOrder)>,
     current_atom_index: usize,
     current_atom_charge: Option<i8>,
     element_buffer: String,
     isotope: Option<u16>,
     chiral_class: ChiralClass,
     current_atom_class: Option<u8>,
-    last_bond_type: BondType,
+    last_bond_type: BondOrder,
     ring_number: Option<usize>,
     ring_bonds: IntMap<usize, (Option<usize>, Option<usize>)>,
     ring_atoms: Vec<usize>,
@@ -119,19 +123,19 @@ impl SMILESParser {
                     parser.handle_number(byte)?;
                 }
                 b'-' => {
-                    parser.last_bond_type = BondType::Single;
+                    parser.last_bond_type = BondOrder::Single;
                 }
                 b'=' => {
-                    parser.last_bond_type = BondType::Double;
+                    parser.last_bond_type = BondOrder::Double;
                 }
                 b'#' => {
-                    parser.last_bond_type = BondType::Triple;
+                    parser.last_bond_type = BondOrder::Triple;
                 }
                 b'$' => {
-                    parser.last_bond_type = BondType::Quadruple;
+                    parser.last_bond_type = BondOrder::Quadruple;
                 }
                 b':' => {
-                    parser.last_bond_type = BondType::Aromatic;
+                    parser.last_bond_type = BondOrder::Aromatic;
                 }
                 b'(' => {
                     if parser.branch_exits > 0 {
@@ -166,7 +170,7 @@ impl SMILESParser {
         for (start, end) in self.ring_bonds.values() {
             if start.is_some() && end.is_some() {
                 self.bonds
-                    .push((start.unwrap(), end.unwrap(), BondType::Aromatic));
+                    .push((start.unwrap(), end.unwrap(), BondOrder::Aromatic));
             }
         }
 
@@ -175,7 +179,7 @@ impl SMILESParser {
             for index in 0..*number {
                 self.atoms.push(Atom::new(1));
                 self.bonds
-                    .push((*atom, hydrogen_index + index as usize, BondType::Single));
+                    .push((*atom, hydrogen_index + index as usize, BondOrder::Single));
             }
         }
 
@@ -233,7 +237,7 @@ impl SMILESParser {
                 self.last_bond_type,
             ));
         }
-        self.last_bond_type = BondType::Single;
+        self.last_bond_type = BondOrder::Single;
         Ok(())
     }
 
@@ -442,7 +446,7 @@ fn byte_to_number(byte: u8) -> u8 {
 
 fn parse_chiral_class(slice: &[u8]) -> Result<ChiralClass, ParseError> {
     match slice {
-        s if s.starts_with(b"@@") => Ok(ChiralClass::R),
+        s if s.starts_with(b"@@") => Ok(ChiralClass::TH(2)),
         s if s.starts_with(b"@AL") => {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::AL(number))
@@ -459,7 +463,7 @@ fn parse_chiral_class(slice: &[u8]) -> Result<ChiralClass, ParseError> {
             let number = parse_number_on_end_of_chiral_class(s);
             Ok(ChiralClass::OH(number))
         }
-        s if s.starts_with(b"@") => Ok(ChiralClass::S),
+        s if s.starts_with(b"@") => Ok(ChiralClass::TH(1)),
         _ => Err(ParseError::ChiralClass(
             String::from_utf8_lossy(slice).to_string(),
         )),
@@ -484,7 +488,7 @@ fn is_valid_isotope(atomic_number: u8, isotope: u16) -> bool {
     };
 
     for iso in isotopes {
-        // TODO check if this is correct
+        // TODO check if this is correct for all cases
         if iso.mass.round() as u16 == isotope {
             return true;
         }
@@ -532,7 +536,7 @@ mod tests {
         let molecules = SMILESParser::parse_smiles("C[C@](F)(Cl)Br").unwrap();
         assert_eq!(molecules[0].atomic_numbers.len(), 8);
         assert_eq!(molecules[0].get_edges().len(), 7);
-        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::S);
+        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::TH(1));
     }
 
     #[test]
@@ -542,7 +546,7 @@ mod tests {
         println!("{:?}", molecules[0].get_edges());
         assert_eq!(molecules[0].atomic_numbers.len(), 11);
         assert_eq!(molecules[0].get_isotope(4).unwrap(), 13);
-        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::S);
+        assert_eq!(molecules[0].get_chiral_class(1), ChiralClass::TH(1));
         assert_eq!(molecules[0].get_edges().len(), 10);
     }
 

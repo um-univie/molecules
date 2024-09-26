@@ -57,7 +57,7 @@ impl<T: Molecule> ToGml for T {
                 if index < bond.target()
                     && (filter.contains(&bond.target()) || outer_filter.contains(&bond.target()))
                 {
-                    let label = bond.bond_type().to_string();
+                    let label = bond.bond_order().to_string();
                     bonds.push_str(&format!(
                         "edge [source {index} target {} label \"{}\"]\n",
                         bond.target(),

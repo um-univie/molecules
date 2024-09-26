@@ -1,5 +1,7 @@
 use rand::Rng;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, Neg};
+use std::fmt;
+use std::fmt::Display;
 
 /// A 3D vector represented by its x, y, and z components.
 ///
@@ -502,6 +504,31 @@ impl Vector {
             (cos_angle + 1.0).abs() < tolerance
         }
     }
+
+    /// Projects this vector onto another vector.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The Vector to project onto.
+    ///
+    /// # Returns
+    ///
+    /// * `Vector` - The projection of this vector onto `other`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(3.0, 4.0, 0.0);
+    /// let v2 = Vector::new(5.0, 0.0, 0.0);
+    /// let projection = v1.project_onto(&v2);
+    /// assert_eq!(projection, Vector::new(3.0, 0.0, 0.0));
+    /// ```
+    pub fn project_onto(&self, other: &Vector) -> Vector {
+        let other_normalized = other.normalize();
+        other_normalized * self.dot(&other_normalized)
+    }
 }
 
 // Implement the Neg trait for Vector
@@ -529,5 +556,11 @@ impl Neg for Vector {
             y: -self.y,
             z: -self.z,
         }
+    }
+}
+
+impl Display for Vector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {}, {})", self.x, self.y, self.z)
     }
 }
