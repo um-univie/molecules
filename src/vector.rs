@@ -15,9 +15,9 @@ use std::fmt::Display;
 /// let v3 = v1 + v2;
 /// let v4 = v1 * 2.0;
 /// let v5 = v1 / 2.0;
-/// println!("Vector sum: {:?}", v3);
-/// println!("Vector scalar multiplication: {:?}", v3);
-/// println!("Vector scalar division: {:?}", v3);
+/// assert!((v3 - Vector::new(5.0, 7.0, 9.0)).length() < 0.1);
+/// assert!((v4 - Vector::new(2.0, 4.0, 6.0)).length() < 0.1);
+/// assert!((v5 - Vector::new(0.5, 1.0, 1.5)).length() < 0.1);
 /// ```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vector {
@@ -529,7 +529,150 @@ impl Vector {
         let other_normalized = other.normalize();
         other_normalized * self.dot(&other_normalized)
     }
+
+    /// Rotates the vector around an axis by a given angle
+    ///
+    /// # Arguments
+    ///
+    /// * `axis` - The axis to rotate around.
+    /// * `angle` - The angle to rotate by in radians.
+    ///
+    /// # Returns
+    /// 
+    /// * `Vector` - The rotated vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v = Vector::new(1.0, 0.0, 0.0);
+    /// let rotated = v.rotate_around_axis(&Vector::new(0.0, 0.0, 1.0), std::f64::consts::PI / 2.0);
+    /// let delta = rotated - Vector::new(0.0, 1.0, 0.0);
+    /// assert!(delta.length() < 0.001);
+    /// ```
+    pub fn rotate_around_axis(&self, axis: &Vector, angle: f64) -> Vector {
+        let axis = axis.normalize();
+        let cos_theta = angle.cos();
+        let sin_theta = angle.sin();
+        let rotation_matrix = [
+            [cos_theta + axis.x * axis.x * (1.0 - cos_theta),
+             axis.x * axis.y * (1.0 - cos_theta) - axis.z * sin_theta,
+             axis.x * axis.z * (1.0 - cos_theta) + axis.y * sin_theta],
+            [axis.x * axis.y * (1.0 - cos_theta) + axis.z * sin_theta,
+             cos_theta + axis.y * axis.y * (1.0 - cos_theta),
+             axis.y * axis.z * (1.0 - cos_theta) - axis.x * sin_theta],
+            [axis.x * axis.z * (1.0 - cos_theta) - axis.y * sin_theta,
+             axis.y * axis.z * (1.0 - cos_theta) + axis.x * sin_theta,
+             cos_theta + axis.z * axis.z * (1.0 - cos_theta)]
+        ];
+
+        let rotated_vector = Vector {
+            x: self.x * rotation_matrix[0][0] + self.y * rotation_matrix[0][1] + self.z * rotation_matrix[0][2],
+            y: self.x * rotation_matrix[1][0] + self.y * rotation_matrix[1][1] + self.z * rotation_matrix[1][2],
+            z: self.x * rotation_matrix[2][0] + self.y * rotation_matrix[2][1] + self.z * rotation_matrix[2][2],
+        };
+
+        rotated_vector
+    }
+
+    pub fn rotate_around_x(&self, angle: f64) -> Vector {
+        self.rotate_around_axis(&Vector::x(), angle)
+    }
+
+    pub fn rotate_around_y(&self, angle: f64) -> Vector {
+        self.rotate_around_axis(&Vector::y(), angle)
+    }
+
+    pub fn rotate_around_z(&self, angle: f64) -> Vector {
+        self.rotate_around_axis(&Vector::z(), angle)
+    }
+
+    pub fn rotate_around(&self, center: Vector, x_angle: f64, y_angle: f64, z_angle: f64) -> Vector {
+        let translated = *self - center;
+        let rotated = translated.rotate_around_x(x_angle).rotate_around_y(y_angle).rotate_around_z(z_angle);
+        rotated + center
+    }
+
+    /// Performs element-wise multiplication of two vectors.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The vector to multiply with element-wise.
+    ///
+    /// # Returns
+    ///
+    /// * `Vector` - A new vector with element-wise multiplication results.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(1.0, 2.0, 3.0);
+    /// let v2 = Vector::new(2.0, 3.0, 4.0);
+    /// let result = v1.element_wise_mul(&v2);
+    /// assert_eq!(result, Vector::new(2.0, 6.0, 12.0));
+    /// ```
+    pub fn element_wise_mul(&self, other: &Vector) -> Vector {
+        Vector {
+            x: self.x * other.x,
+            y: self.y * other.y,
+            z: self.z * other.z,
+        }
+    }
+
+    /// Reflects the vector about a normal vector.
+    ///
+    /// # Arguments
+    ///
+    /// * `normal` - The normal vector to reflect about.
+    ///
+    /// # Returns
+    ///
+    /// * `Vector` - The reflected vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v = Vector::new(1.0, -1.0, 0.0);
+    /// let normal = Vector::new(0.0, 1.0, 0.0);
+    /// let reflected = v.reflect(&normal);
+    /// assert_eq!(reflected, Vector::new(1.0, 1.0, 0.0));
+    /// ```
+    pub fn reflect(&self, normal: &Vector) -> Vector {
+        *self - *normal * (2.0 * self.dot(normal))
+    }
+
+    /// Linearly interpolates between two vectors.
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The vector to interpolate towards.
+    /// * `t` - The interpolation parameter (0.0 to 1.0).
+    ///
+    /// # Returns
+    ///
+    /// * `Vector` - The interpolated vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(0.0, 0.0, 0.0);
+    /// let v2 = Vector::new(10.0, 10.0, 10.0);
+    /// let interpolated = v1.lerp(&v2, 0.5);
+    /// assert_eq!(interpolated, Vector::new(5.0, 5.0, 5.0));
+    /// ```
+    pub fn lerp(&self, other: &Vector, t: f64) -> Vector {
+        *self + (*other - *self) * t
+    }
 }
+
+
 
 // Implement the Neg trait for Vector
 impl Neg for Vector {
@@ -562,5 +705,211 @@ impl Neg for Vector {
 impl Display for Vector {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f64::consts::PI;
+
+    const EPSILON: f64 = 1e-10;
+
+    fn assert_vector_eq(v1: &Vector, v2: &Vector) {
+        assert!((*v1 - *v2).length() < EPSILON, "Vectors are not equal within epsilon: {:?} != {:?}", v1, v2);
+    }
+
+    #[test]
+    fn test_vector_creation() {
+        let v = Vector::new(1.0, 2.0, 3.0);
+        assert_vector_eq(&v, &Vector::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn test_vector_addition() {
+        let v1 = Vector::new(1.0, 2.0, 3.0);
+        let v2 = Vector::new(4.0, 5.0, 6.0);
+        let result = v1 + v2;
+        assert_vector_eq(&result, &Vector::new(5.0, 7.0, 9.0));
+    }
+
+    #[test]
+    fn test_vector_subtraction() {
+        let v1 = Vector::new(4.0, 5.0, 6.0);
+        let v2 = Vector::new(1.0, 2.0, 3.0);
+        let result = v1 - v2;
+        assert_vector_eq(&result, &Vector::new(3.0, 3.0, 3.0));
+    }
+
+    #[test]
+    fn test_vector_scalar_multiplication() {
+        let v = Vector::new(1.0, 2.0, 3.0);
+        let result = v * 2.0;
+        assert_vector_eq(&result, &Vector::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn test_vector_scalar_division() {
+        let v = Vector::new(2.0, 4.0, 6.0);
+        let result = v / 2.0;
+        assert_vector_eq(&result, &Vector::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn test_vector_negation() {
+        let v = Vector::new(1.0, -2.0, 3.0);
+        let result = -v;
+        assert_vector_eq(&result, &Vector::new(-1.0, 2.0, -3.0));
+    }
+
+    #[test]
+    fn test_vector_dot_product() {
+        let v1 = Vector::new(1.0, 2.0, 3.0);
+        let v2 = Vector::new(4.0, 5.0, 6.0);
+        let result = v1.dot(&v2);
+        assert!((result - 32.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_cross_product() {
+        let v1 = Vector::new(1.0, 2.0, 3.0);
+        let v2 = Vector::new(4.0, 5.0, 6.0);
+        let result = v1.cross(&v2);
+        assert_vector_eq(&result, &Vector::new(-3.0, 6.0, -3.0));
+    }
+
+    #[test]
+    fn test_vector_length() {
+        let v = Vector::new(3.0, 4.0, 0.0);
+        assert!((v.length() - 5.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_normalize() {
+        let v = Vector::new(3.0, 4.0, 0.0);
+        let normalized = v.normalize();
+        assert!((normalized.length() - 1.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_distance() {
+        let v1 = Vector::new(1.0, 2.0, 3.0);
+        let v2 = Vector::new(4.0, 6.0, 8.0);
+        assert!((v1.distance(&v2) - 7.0710678118654755).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_angle_between() {
+        let v1 = Vector::new(1.0, 0.0, 0.0);
+        let v2 = Vector::new(0.0, 1.0, 0.0);
+        assert!((v1.angle_between(&v2) - PI / 2.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_project_onto() {
+        let v1 = Vector::new(3.0, 4.0, 0.0);
+        let v2 = Vector::new(5.0, 0.0, 0.0);
+        let projection = v1.project_onto(&v2);
+        assert_vector_eq(&projection, &Vector::new(3.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_vector_rotate_around_axis() {
+        let v = Vector::new(1.0, 0.0, 0.0);
+        let axis = Vector::new(0.0, 0.0, 1.0);
+        let rotated = v.rotate_around_axis(&axis, PI / 2.0);
+        assert_vector_eq(&rotated, &Vector::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn test_vector_element_wise_mul() {
+        let v1 = Vector::new(1.0, 2.0, 3.0);
+        let v2 = Vector::new(2.0, 3.0, 4.0);
+        let result = v1.element_wise_mul(&v2);
+        assert_vector_eq(&result, &Vector::new(2.0, 6.0, 12.0));
+    }
+
+    #[test]
+    fn test_vector_reflect() {
+        let v = Vector::new(1.0, -1.0, 0.0);
+        let normal = Vector::new(0.0, 1.0, 0.0);
+        let reflected = v.reflect(&normal);
+        assert_vector_eq(&reflected, &Vector::new(1.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn test_vector_lerp() {
+        let v1 = Vector::new(0.0, 0.0, 0.0);
+        let v2 = Vector::new(10.0, 10.0, 10.0);
+        let interpolated = v1.lerp(&v2, 0.5);
+        assert_vector_eq(&interpolated, &Vector::new(5.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn test_vector_default() {
+        let v = Vector::default();
+        assert_vector_eq(&v, &Vector::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn test_vector_from_vec() {
+        let array = [1.0, 2.0, 3.0];
+        let v = Vector::from_vec(&array);
+        assert_vector_eq(&v, &Vector::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn test_vector_as_tuple() {
+        let v = Vector::new(1.0, 2.0, 3.0);
+        assert_eq!(v.as_tuple(), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn test_vector_as_array() {
+        let v = Vector::new(1.0, 2.0, 3.0);
+        assert_eq!(v.as_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_vector_as_vec() {
+        let v = Vector::new(1.0, 2.0, 3.0);
+        assert_eq!(v.as_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_vector_is_opposite() {
+        let v1 = Vector::new(1.0, 0.0, 0.0);
+        let v2 = Vector::new(-1.0, 0.0, 0.0);
+        assert!(v1.is_opposite(&v2, EPSILON));
+
+        let v3 = Vector::new(-0.99, 0.01, 0.0);
+        assert!(!v1.is_opposite(&v3, EPSILON));
+        assert!(v1.is_opposite(&v3, 0.02));
+    }
+
+    #[test]
+    fn test_vector_are_vectors_parallel() {
+        let v1 = Vector::new(1.0, 0.0, 0.0);
+        let v2 = Vector::new(2.0, 0.0, 0.0);
+        assert!(v1.are_vectors_parallel(&v2, EPSILON));
+
+        let v3 = Vector::new(1.0, 0.1, 0.0);
+        assert!(!v1.are_vectors_parallel(&v3, EPSILON));
+    }
+
+    #[test]
+    fn test_vector_triple_product() {
+        let v1 = Vector::new(1.0, 0.0, 0.0);
+        let v2 = Vector::new(0.0, 1.0, 0.0);
+        let v3 = Vector::new(0.0, 0.0, 1.0);
+        assert!((v1.triple_product(&v2, &v3) - 1.0).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_vector_rotate_around() {
+        let v = Vector::new(1.0, 0.0, 0.0);
+        let center = Vector::new(0.0, 0.0, 0.0);
+        let rotated = v.rotate_around(center, 0.0, 0.0, PI / 2.0);
+        assert_vector_eq(&rotated, &Vector::new(0.0, 1.0, 0.0));
     }
 }
