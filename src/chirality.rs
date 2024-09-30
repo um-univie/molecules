@@ -18,8 +18,8 @@ pub enum ChiralClass {
     SP(u8), // @ 1..=3 1 = U, 2 = Z, 3 = 4
     TB(u8), // @ 1..=20 
     OH(u8), // @ 1..=30
-    Cis,
-    Trans,
+    Clockwise,
+    Counterclockwise,
     #[default]
     None,
 }
@@ -71,9 +71,16 @@ enum AxisOrientation {
 
 impl Molecule3D {
     pub fn identify_chiral_classes(&mut self) {
+        if self.chiral_classes.is_some() {
+            return;
+        }
         let mut chiral_classes = vec![ChiralClass::None; self.len()];
 
         for (index, &atomic_number) in self.atomic_numbers().iter().enumerate() {
+            // If we already know the chirality, skip it
+            if chiral_classes[index] != ChiralClass::None {
+                continue;
+            }
             let Some(neighbors) = self.get_atom_bonds(index) else {
                 continue;
             };
@@ -89,7 +96,7 @@ impl Molecule3D {
                 self.determine_allene_chirality(neighbors).unwrap_or(ChiralClass::None)
             } 
             else if self.is_potential_cis_trans(neighbors) {
-                self.determine_cis_trans_chirality(index, neighbors)
+                self.determine_cis_trans_chirality(index, neighbors, &mut chiral_classes)
             }
             else if self.is_potential_trigonal_bipyramidal(neighbors) {
                 self.determine_trigonal_bipyramidal_chirality(index, neighbors)
@@ -104,38 +111,79 @@ impl Molecule3D {
         self.chiral_classes = Some(chiral_classes);
     }
 
-    fn determine_cis_trans_chirality(&self, index: usize, neighbors: &[BondTarget]) -> ChiralClass {
-        let double_bond_neighbors = neighbors.iter().filter(|&bond| bond.bond_order() == BondOrder::Double).collect::<Vec<_>>();
-        if double_bond_neighbors.len() != 1 {
+    fn determine_cis_trans_chirality(&self, center_atom_index: usize, center_neighbors: &[BondTarget], chiral_classes: &mut [ChiralClass]) -> ChiralClass {
+        // Find the double bond neighbor
+        let double_bond_neighbor = center_neighbors.iter()
+            .find(|&bond| bond.bond_order() == BondOrder::Double)
+            .map(|bond| bond.target());
+        
+        let Some(double_bond_neighbor_index) = double_bond_neighbor else {
+            return ChiralClass::None;
+        };
+
+        // Get the neighbors of the double bond neighbor
+        let double_bond_neighbor_bonds = self.get_atom_bonds(double_bond_neighbor_index)
+            .unwrap_or_default();
+
+        // Ensure we have two single bonds on each side of the double bond
+        if center_neighbors.len() != 3 || double_bond_neighbor_bonds.len() != 3 {
             return ChiralClass::None;
         }
-        let double_bond_neighbor_index = double_bond_neighbors[0].target();
-        // This is wrong FIX IT
-        let mut double_bond_neighbors = self.get_atom_bonds(double_bond_neighbor_index).unwrap();
-        if double_bond_neighbors.len() != 2 && double_bond_neighbors.iter().all(|bond| bond.bond_order() == BondOrder::Single) {
+
+        // Get positions of all relevant atoms
+        let center_atom_position = self.get_atom_position(center_atom_index).unwrap();
+        let double_bond_neighbor_position = self.get_atom_position(double_bond_neighbor_index).unwrap();
+
+        // Find the single bond neighbors for both sides
+        let center_single_bond_neighbors: Vec<_> = center_neighbors.iter()
+            .filter(|&bond| bond.bond_order() == BondOrder::Single)
+            .collect();
+        let double_bond_single_neighbors: Vec<_> = double_bond_neighbor_bonds.iter()
+            .filter(|&bond| bond.bond_order() == BondOrder::Single && bond.target() != center_atom_index)
+            .collect();
+
+        if center_single_bond_neighbors.len() != 2 || double_bond_single_neighbors.len() != 2 {
             return ChiralClass::None;
         }
-        // Determine ordering of double bond neighbors based on their atomic numbers
-        let mut neighbor_ordering = 0;
-        if self.atomic_numbers()[double_bond_neighbors[0].target()] > self.atomic_numbers()[double_bond_neighbors[1].target()] {
-            neighbor_ordering = 1;
-        }
-        let mut self_ordering = 0;
-        if self.atomic_numbers()[index] > self.atomic_numbers()[double_bond_neighbor_index] {
-            self_ordering = 1;
-        }
 
-        // Are the higher index atoms perpendicular to each other?
+        // Get positions of single bond neighbors
+        let center_neighbor1_position = self.get_atom_position(center_single_bond_neighbors[0].target()).unwrap();
+        let center_neighbor2_position = self.get_atom_position(center_single_bond_neighbors[1].target()).unwrap();
+        let double_bond_neighbor1_position = self.get_atom_position(double_bond_single_neighbors[0].target()).unwrap();
+        let double_bond_neighbor2_position = self.get_atom_position(double_bond_single_neighbors[1].target()).unwrap();
 
-        let self_position = self.get_atom_position(neighbors[self_ordering].target()).unwrap() - self.get_atom_position(index).unwrap();
-        let other_position = self.get_atom_position(double_bond_neighbors[neighbor_ordering].target()).unwrap() - self.get_atom_position(double_bond_neighbor_index).unwrap();
+        // Calculate vectors
+        let center_neighbor1_vector = center_neighbor1_position - center_atom_position;
+        let center_neighbor2_vector = center_neighbor2_position - center_atom_position;
+        let double_bond_neighbor1_vector = double_bond_neighbor1_position - double_bond_neighbor_position;
+        let double_bond_neighbor2_vector = double_bond_neighbor2_position - double_bond_neighbor_position;
+        let double_bond_vector = double_bond_neighbor_position - center_atom_position;
 
+        // Calculate the axis perpendicular to the plane
+        let perpendicular_axis = double_bond_vector.cross(&center_neighbor1_position);
 
-        if self_position.dot(&other_position) < 0.1 {
-            ChiralClass::Trans
-        } else  {
-            ChiralClass::Cis
-        }
+        // Determine chirality for the center atom
+        let center_cross_product = center_neighbor1_vector.cross(&center_neighbor2_vector);
+        let center_chirality = if center_cross_product.dot(&perpendicular_axis) > 0.0 {
+            ChiralClass::Counterclockwise
+        } else {
+            ChiralClass::Clockwise
+        };
+
+        // Determine chirality for the double bond neighbor atom
+        let neighbor_cross_product = double_bond_neighbor1_vector.cross(&double_bond_neighbor2_vector);
+        let neighbor_chirality = if neighbor_cross_product.dot(&perpendicular_axis) > 0.0 {
+            ChiralClass::Counterclockwise
+        } else {
+            ChiralClass::Clockwise
+        };
+
+        // Set the chirality for both atoms
+        chiral_classes[center_atom_index] = center_chirality;
+        chiral_classes[double_bond_neighbor_index] = neighbor_chirality;
+
+        // Return the chirality of the center atom
+        center_chirality
     }
     
     /// Determines the chirality of a square planar structure.
@@ -650,30 +698,6 @@ impl Molecule3D {
         neighbors.len() == 6
     }
 
-    fn are_five_atoms_coplanar(&self, atom_indices: &[usize], tolerance: f64) -> bool {
-        if atom_indices.len() != 5 {
-            return false
-        }
-        let positions: Vec<Vector> = atom_indices.iter().flat_map(|&index| self.get_atom_position(index)).collect();
-
-        // Create four vectors from the first atom to the others
-        let vector1 = positions[1] - positions[0];
-        let vector2 = positions[2] - positions[0];
-        let vector3 = positions[3] - positions[0];
-        let vector4 = positions[4] - positions[0];
-
-        // Calculate normal vectors using cross products
-        let normal_vector1 = vector1.cross(&vector2);
-        let normal_vector2 = vector1.cross(&vector3);
-        let normal_vector3 = vector1.cross(&vector4);
-        let normal_vector4 = vector2.cross(&vector3);
-
-        // Check if all normal vectors are parallel (or anti-parallel)
-        normal_vector1.are_vectors_parallel(&normal_vector2, tolerance) &&
-        normal_vector1.are_vectors_parallel(&normal_vector3, tolerance) &&
-        normal_vector1.are_vectors_parallel(&normal_vector4, tolerance)
-    }
-
     fn is_potential_tetrahedral_center(&self, atomic_number: u8, neighbors: &[BondTarget]) -> bool {
         let number_of_hydrogens = neighbors
             .iter()
@@ -755,5 +779,28 @@ mod tests {
             mol.identify_chiral_classes();
             assert_eq!(mol.chiral_classes().unwrap()[0], chiral_class);
         }
+    }
+
+    #[test]
+    fn test_cis_trans_chirality() {
+        let molecules = Molecule3D::from_sdf("tests/cis_2_butene.sdf").unwrap();
+        let mut cis_2_butene = molecules[0].clone();
+        cis_2_butene.identify_chiral_classes();
+        assert_eq!(cis_2_butene.chiral_classes().unwrap()[0], ChiralClass::Counterclockwise);
+        assert_eq!(cis_2_butene.chiral_classes().unwrap()[1], ChiralClass::Clockwise);
+
+        let molecules = Molecule3D::from_sdf("tests/trans_2_butene.sdf").unwrap();
+        let mut trans_2_butene = molecules[0].clone();
+        trans_2_butene.identify_chiral_classes();
+        assert_eq!(trans_2_butene.chiral_classes().unwrap()[0], ChiralClass::Counterclockwise);
+        assert_eq!(trans_2_butene.chiral_classes().unwrap()[1], ChiralClass::Counterclockwise);
+
+        let molecules = Molecule3D::from_sdf("tests/pentene.sdf").unwrap();
+        let mut pentene = molecules[0].clone();
+        pentene.identify_chiral_classes();
+        pentene.identify_chiral_classes();
+        assert_eq!(pentene.chiral_classes().unwrap()[1], ChiralClass::Counterclockwise);
+        assert_eq!(pentene.chiral_classes().unwrap()[3], ChiralClass::Counterclockwise);
+
     }
 }
