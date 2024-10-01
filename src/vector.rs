@@ -399,15 +399,15 @@ impl Vector {
     /// let vec_b = Vector::new(0.0, 1.0, 0.0);
     ///
     /// let angle = vec_a.angle_between(&vec_b);
-    /// assert_eq!(angle, std::f64::consts::FRAC_PI_2);
+    /// assert_eq!(angle, Some(std::f64::consts::FRAC_PI_2));
     /// ```
-    pub fn angle_between(&self, other: &Vector) -> f64 {
+    pub fn angle_between(&self, other: &Vector) -> Option<f64> {
         let lengths_product = self.length() * other.length();
         if lengths_product == 0.0 {
-            0.0
+            None
         } else {
             let angle_cosine = (self.dot(other) / (lengths_product)).clamp(-1.0, 1.0);
-            angle_cosine.acos()
+            Some(angle_cosine.acos())
         }
     }
     /// Calculates a normal vector for a given input vector
@@ -431,10 +431,7 @@ impl Vector {
         }
     }
 
-    /// Calculates the angle given three points in the order, start, middle, end
-    ///
-    /// # Panics
-    /// Function does not panic
+    /// Calculates the angle given three points in the order, start, middle, end If any of the points are the same or any of the vectors is 0 the angle is not defined and None is returned
     ///
     /// # Example
     /// ```
@@ -443,9 +440,9 @@ impl Vector {
     /// let start_point = Vector::new(1.0,0.0,0.0);
     /// let middle_point = Vector::new(0.0,0.0,0.0);
     /// let end_point = Vector::new(0.0,1.0,0.0);
-    /// assert_eq!(start_point.angle_between_points(&middle_point,&end_point),1.5707963267948966);
+    /// assert_eq!(start_point.angle_between_points(&middle_point,&end_point),Some(1.5707963267948966));
     /// ```
-    pub fn angle_between_points(&self, middle_point: &Vector, end_point: &Vector) -> f64 {
+    pub fn angle_between_points(&self, middle_point: &Vector, end_point: &Vector) -> Option<f64> {
         let v1 = *middle_point - *self;
         let v2 = *end_point - *middle_point;
         v1.angle_between(&v2)
@@ -817,7 +814,7 @@ mod tests {
     fn test_vector_angle_between() {
         let v1 = Vector::new(1.0, 0.0, 0.0);
         let v2 = Vector::new(0.0, 1.0, 0.0);
-        assert!((v1.angle_between(&v2) - PI / 2.0).abs() < EPSILON);
+        assert!((v1.angle_between(&v2).unwrap() - PI / 2.0).abs() < EPSILON);
     }
 
     #[test]

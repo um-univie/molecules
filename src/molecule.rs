@@ -1272,8 +1272,12 @@ impl Molecule3D {
                     let position_vector2 = &self.positions[atom_index];
                     let position_vector3 = &self.positions[neighbor2_index];
 
-                    let angle =
-                        position_vector1.angle_between_points(position_vector2, position_vector3);
+                    let Some(angle) =
+                        position_vector1.angle_between_points(position_vector2, position_vector3) else {
+                            // This should never happen
+                            return;
+                        };
+
                     local_bond_angles.push(BondAngle::new(
                         angle,
                         (neighbor1_index, atom_index, neighbor2_index),
@@ -1360,7 +1364,8 @@ impl Molecule3D {
         let v3 = d - c;
         let normal1 = v1.cross(&v2);
         let normal2 = v2.cross(&v3);
-        let angle = normal1.angle_between(&normal2);
+        let angle = normal1.angle_between(&normal2)?;
+
         let sign = normal1.cross(&normal2).dot(&v2);
         if sign < 0.0 {
             Some(-angle)
@@ -2194,7 +2199,7 @@ mod tests {
             z: 0.0,
         };
         let angle = v1.angle_between(&v2);
-        assert_eq!(angle, std::f64::consts::FRAC_PI_2);
+        assert_eq!(angle, Some(std::f64::consts::FRAC_PI_2));
     }
     #[test]
     fn test_cross_product() {

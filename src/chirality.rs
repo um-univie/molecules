@@ -657,7 +657,7 @@ impl Molecule3D {
 
         let angle = left_plane.angle_between(&right_plane);
 
-        Some(if angle > 0.0 { ChiralClass::AL(1) } else { ChiralClass::AL(2) })
+        Some(if angle > Some(0.0) { ChiralClass::AL(1) } else { ChiralClass::AL(2) })
     }
 
     /// Calculates the normal vector of the plane formed by a central atom and its two neighbors.
