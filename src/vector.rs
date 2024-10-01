@@ -80,7 +80,7 @@ impl AddAssign for Vector {
     }
 }
 
-// Implement the AddAssign trait for Vector
+// Implement the MulAssign trait for Vector
 impl MulAssign<f64> for Vector {
     fn mul_assign(&mut self, scalar: f64) {
         self.x = self.x * scalar;
