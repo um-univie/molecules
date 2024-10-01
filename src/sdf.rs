@@ -6,7 +6,7 @@ use crate::io::BondTarget;
 use crate::{vector::Vector,bond::{Bond,BondOrder},molecule::Molecule3D};  
 use std::io::{self, BufRead, BufReader};
 use chemistry_consts::ElementProperties;
-use tinyvec::{array_vec, ArrayVec};
+use tinyvec::ArrayVec;
 
 
 /// Represents an atom in the V2000 format of an SDF file.
@@ -49,35 +49,38 @@ pub struct AtomV2000 {
     
 }
 
-#[derive(Debug)]
-pub enum AtomParseError {
-    LineTooShort(usize),
-    ParseFloatError(ParseFloatError),
-    ParseIntError(ParseIntError),
-}
-
 impl FromStr for AtomV2000 {
-    type Err = Box<dyn std::error::Error>;
-    fn from_str(s: &str) -> Result<Self, Self::Err>{
-        if s.len() < 69 {
-            return Err("Atom String too short".into())
+    type Err = SDFParseError;
+
+    /// Creates an `AtomV2000` instance from a string slice.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - A string slice containing atom data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input string is too short or if parsing fails.
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        if input.len() < 69 {
+            return Err(SDFParseError::InvalidAtom("Atom string too short".into()));
         }
 
         Ok(AtomV2000 {
-            x: s[0..10].trim().parse()?,
-            y: s[10..20].trim().parse()?,
-            z: s[20..30].trim().parse()?,
-            symbol: s[31..34].trim().to_string(),
-            isotope_mass_difference: s[34..36].trim().parse().ok(),
-            formal_charge: s[36..39].trim().parse().ok(),
-            stereo_parity: s[39..42].trim().parse().ok(),
-            hydrogen_count: s[42..45].trim().parse().ok(),
-            stereo_care_box: s[45..48].trim().parse().ok(),
-            valence: s[48..51].trim().parse().ok(),
-            implicit_hydrogen_count: s[51..54].trim().parse().ok(),
-            atom_atom_mapping_number: s[60..63].trim().parse().ok(),
-            inversion_retention_flag: s[63..66].trim().parse().ok(),
-            exact_change_flag: s[66..69].trim().parse().ok(),
+            x: input[0..10].trim().parse().map_err(SDFParseError::ParseFloatError)?,
+            y: input[10..20].trim().parse().map_err(SDFParseError::ParseFloatError)?,
+            z: input[20..30].trim().parse().map_err(SDFParseError::ParseFloatError)?,
+            symbol: input[31..34].trim().to_string(),
+            isotope_mass_difference: input[34..36].trim().parse().ok(),
+            formal_charge: input[36..39].trim().parse().ok(),
+            stereo_parity: input[39..42].trim().parse().ok(),
+            hydrogen_count: input[42..45].trim().parse().ok(),
+            stereo_care_box: input[45..48].trim().parse().ok(),
+            valence: input[48..51].trim().parse().ok(),
+            implicit_hydrogen_count: input[51..54].trim().parse().ok(),
+            atom_atom_mapping_number: input[60..63].trim().parse().ok(),
+            inversion_retention_flag: input[63..66].trim().parse().ok(),
+            exact_change_flag: input[66..69].trim().parse().ok(),
         })
     }
 }
@@ -233,6 +236,8 @@ pub enum ParseError {
 #[derive(Debug)]
 pub enum SDFParseError {
     MOLParseError(ParseError),
+    ParseFloatError(ParseFloatError),
+    ParseIntError(ParseIntError),
     InvalidAtom(String),
     IoError(io::Error),
     InvalidBond,
@@ -436,11 +441,9 @@ impl Molecule3D {
             let mut atomic_numbers = vec![];
             let mut charges = vec![];
             let mut positions = vec![];
-            let mut charge: i32 = 0;
             
             for atom in entry.mol_file.atoms {
                 let atom_charge = atom.formal_charge.unwrap_or(0);
-                charge += atom_charge as i32;
                 atomic_numbers.push(atom.symbol.to_uppercase().as_str().atomic_number().ok_or(SDFParseError::InvalidAtom(atom.symbol.to_string()))?);
                 charges.push(atom_charge);
                 positions.push(Vector::new(atom.x, atom.y, atom.z));
@@ -456,7 +459,6 @@ impl Molecule3D {
                     charges,
                     positions,
                     atomic_numbers,
-                    charge,
                     atom_bonds: bonds,
                     ..Default::default()
                 }
