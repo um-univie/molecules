@@ -3,7 +3,9 @@ use crate::{
     bond::{BondOrder,BondTarget},
     chirality::ChiralClass,
     consts::BOND_TOLERANCE,
-    vector::Vector};
+    vector::Vector,
+    molecular_formula::MolecularFormula
+};
 use chemistry_consts::ElementProperties;
 use core::fmt::{Display, Formatter};
 use itertools::Itertools;
@@ -28,7 +30,6 @@ use std::{
 pub struct Molecule2D {
     pub atomic_numbers: Vec<u8>,
     pub atom_classes: Option<Vec<u8>>,
-    pub charge: i32,
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
@@ -40,7 +41,6 @@ pub struct Molecule2D {
 pub struct Molecule3D {
     pub atomic_numbers: Vec<u8>,
     pub atom_classes: Option<Vec<u8>>,
-    pub charge: i32,
     pub charges: Vec<i8>,
     pub chiral_classes: Option<Vec<ChiralClass>>,
     pub isotopes: Option<Vec<u16>>,
@@ -124,7 +124,7 @@ pub trait Molecule {
         self.get_atom_charge(atom_index1)
             .cmp(&self.get_atom_charge(atom_index2))
     }
-    /// Compares the electronegativities of two atoms
+    /// Compares the electronegativities of two atoms based on the Pauling Scale, for detailed Values see the chemistry_consts crate
     ///
     /// # Arguments
     /// * 'atom1_index' - The index of the first atom.
@@ -135,6 +135,7 @@ pub trait Molecule {
     /// ```
     /// use molecules::molecule::{Molecule3D,Molecule};
     /// let molecule = Molecule3D::from_xyz("tests/ethane.xyz");
+    /// 
     /// assert_eq!(molecule.cmp_electronegativities(0, 1), std::cmp::Ordering::Equal);
     /// ```
     fn cmp_electronegativities(
@@ -146,6 +147,22 @@ pub trait Molecule {
             .cmp(&self.electronegativity(atom2_index))
     }
 
+    /// Returns the Pauling electronegativity of the atom at the specified index scaled by 100
+    ///
+    /// # Arguments
+    /// * 'atom_index' - The index of the atom for which to retrieve the electronegativity.
+    ///
+    /// # Returns
+    /// An `Option` containing the electronegativity value as a `u16` if the atom index is valid, `None` otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use molecules::molecule::{Molecule3D,Molecule};
+    /// let molecule = Molecule3D::from_xyz("tests/ethane.xyz");
+    /// assert_eq!(molecule.electronegativity(0), Some(254)); // Carbon's electronegativity
+    /// assert_eq!(molecule.electronegativity(2), Some(220)); // Hydrogen's electronegativity
+    /// ```
     fn electronegativity(&self, atom_index: usize) -> Option<u16> {
         self.atomic_numbers().get(atom_index)?.electronegativity()
     }
@@ -185,9 +202,11 @@ pub trait Molecule {
             .filter(|bond| self.atomic_numbers()[bond.target()] == element)
             .count()
     }
+
     fn expected_valency(&self, atom_index: usize) -> Option<i8> {
         self.atomic_numbers()[atom_index].valencies()?.next()
     }
+
     fn actual_valency(&self, atom_index: usize) -> i8 {
         self.atom_bonds()[atom_index]
             .iter()
@@ -229,22 +248,30 @@ pub trait Molecule {
     fn number_of_atoms(&self) -> usize {
         self.atomic_numbers().len()
     }
-    fn get_charge(&self) -> i32;
+
+    fn formal_charge(&self) -> i32 {
+        self.charges().iter().sum::<i8>() as i32
+    }
+
     fn get_atom_charge(&self, atom_index: usize) -> i8 {
         self.charges()[atom_index]
     }
+
     fn get_atom_charge_mut(&mut self, atom_index: usize) -> &mut i8 {
         &mut self.charges_mut()[atom_index]
     }
+
     fn get_isotope(&self, atom_index: usize) -> Option<u16> {
         self.isotopes()
             .and_then(|isotopes| isotopes.get(atom_index).copied())
     }
+
     fn get_chiral_class(&self, atom_index: usize) -> ChiralClass {
         self.chiral_classes()
             .and_then(|chirals| chirals.get(atom_index).copied())
             .unwrap_or(ChiralClass::None)
     }
+
     fn is_atom_radical(&self, atom_index: usize) -> bool;
     fn set_atom_radical(&mut self, atom_index: usize, is_radical: bool);
     fn set_atom_charge(&mut self, atom_index: usize, charge: i8) {
@@ -693,10 +720,6 @@ impl Molecule for Molecule3D {
         self.chiral_classes.as_mut()
     }
 
-    fn get_charge(&self) -> i32 {
-        self.charge
-    }
-
     fn isotopes(&self) -> Option<&Vec<u16>> {
         self.isotopes.as_ref()
     }
@@ -737,6 +760,8 @@ impl Molecule for Molecule3D {
         molecule.identify_bonds(BOND_TOLERANCE);
         molecule
     }
+
+
 }
 
 impl Molecule for Molecule2D {
@@ -769,9 +794,6 @@ impl Molecule for Molecule2D {
     }
     fn chiral_classes_mut(&mut self) -> Option<&mut Vec<ChiralClass>> {
         self.chiral_classes.as_mut()
-    }
-    fn get_charge(&self) -> i32 {
-        self.charge
     }
     fn isotopes(&self) -> Option<&Vec<u16>> {
         self.isotopes.as_ref()
@@ -1065,131 +1087,14 @@ impl Molecule3D {
         tree
     }
 
-    // PROTOTYPE
-    pub fn extract_transformation_rule(&self, other: &Self) -> String {
-        let _transformation_rule = String::new();
-        let _atom_changes: Vec<(usize, usize)> = Vec::new();
-        let charge_changes = self.charge_changes(other);
-        let changed_nodes: Vec<usize> = charge_changes.iter().map(|changes| changes.0).collect();
-        let _bond_changes = self.identify_bond_changes(other);
-
-        let mut possible_paths = Vec::new();
-
-        changed_nodes.iter().combinations(2).for_each(|window| {
-            let atom1 = window[0];
-            let atom2 = window[1];
-            if let Some(path) = self.shortest_path(*atom1, *atom2) {
-                possible_paths.push(path)
-            }
-        });
-
-        possible_paths
-            .iter()
-            .filter(|path| changed_nodes.iter().all(|node| path.contains(node)))
-            .for_each(|path| println!("{path:?}"));
-
-        "".to_string()
-    }
-
-    pub fn identify_bond_changes(&self, other: &Self) -> Option<Vec<BondChange>> {
-        let mut bond_changes: Vec<BondChange> = Vec::new();
-        self.atom_bonds
-            .iter()
-            .zip(other.atom_bonds.iter())
-            .enumerate()
-            .for_each(|(atom_index, (self_bonds, other_bonds))| {
-                // Check for broken bonds
-                // If the other molecule does not contain the bond, it must have been broken
-                for &self_bond in self_bonds {
-                    if !other_bonds
-                        .iter()
-                        .map(|other_bond| other_bond.target())
-                        .contains(&self_bond.target())
-                        && self_bond.target() > atom_index
-                    {
-                        bond_changes.push(BondChange::broken(atom_index, self_bond.target()));
-                    }
-                }
-
-                // Check for formed bonds
-                // If the self molecule does not contain the bond, it must have been formed
-                for &other_bond in other_bonds {
-                    if !self_bonds
-                        .iter()
-                        .map(|self_bond| self_bond.target())
-                        .contains(&other_bond.target())
-                        && other_bond.target() > atom_index
-                    {
-                        bond_changes.push(BondChange::formed(atom_index, other_bond.target()));
-                    }
-                }
-            });
-        if bond_changes.is_empty() {
-            None
-        } else {
-            Some(bond_changes)
-        }
-    }
-
-    pub fn charge_changes(&self, other: &Molecule3D) -> Vec<(usize, i8, i8)> {
-        self.charges
-            .iter()
-            .zip(&other.charges)
-            .enumerate()
-            .filter_map(|(index, (&charge1, &charge2))| {
-                if charge1 != charge2 {
-                    Some((index, charge1, charge2))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     pub fn update_atom_charge(&mut self, atom_index: usize, charge: i8) {
         if atom_index < self.charges().len() {
-            self.charge += charge as i32;
             self.charges_mut()[atom_index] += charge;
         } else {
             println!("Atom index out of bounds, could not update charge");
         }
     }
 
-    pub fn identify_difference(&self, other: &Molecule3D) {
-        let _charge_changes = self.charge_changes(other);
-        let _bond_changes = self.identify_bond_changes(other);
-        let _bond_type_changes = self.identify_bond_type_changes(other);
-    }
-
-    fn identify_bond_type_changes(&self, other: &Molecule3D) -> Vec<BondTypeChange> {
-        self.atom_bonds
-            .iter()
-            .zip(&other.atom_bonds)
-            .enumerate()
-            .flat_map(|(index, (self_bonds, other_bonds))| {
-                self_bonds
-                    .iter()
-                    .filter_map(|self_bond| {
-                        other_bonds
-                            .iter()
-                            .find(|other_bond| other_bond.target() == self_bond.target())
-                            .and_then(|other_bond| {
-                                if self_bond.bond_order() != other_bond.bond_order() {
-                                    Some(BondTypeChange {
-                                        atom_index: index,
-                                        target: self_bond.target(),
-                                        from: self_bond.bond_order(),
-                                        to: other_bond.bond_order(),
-                                    })
-                                } else {
-                                    None
-                                }
-                            })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect()
-    }
     pub fn identify_bonds(&mut self, tolerance: f64) {
         // The threshold is dynamically determined by the largest covalent radius in the molecule
         let threshold_squared = (self
@@ -1395,7 +1300,6 @@ impl Molecule3D {
     /// assert_eq!(dihedrals.len(), 9);
     ///
     ///```
-    // PROTOTYPE
     pub fn dihedrals(&mut self) -> Vec<((usize, usize, usize, usize), f64)> {
         let bond_angles = self.find_angles();
         let dihedrals: Vec<((usize, usize, usize, usize), f64)> = bond_angles
@@ -1517,10 +1421,6 @@ impl Molecule3D {
         self.update_atom_charge(neighbor_index, charge);
     }
 
-    pub fn update_charge(&mut self, charge: i8) {
-        self.charge += charge as i32;
-    }
-
     pub fn identify_bond_types(&mut self) {
         //, previous_state: Option<IntMap<usize,Vec<Bond>>>) {
         let mut degrees = self.degrees();
@@ -1624,193 +1524,13 @@ impl Molecule3D {
         }
         molecules
     }
-}
 
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct MolecularFormula {
-    elements: IntMap<u8, usize>,
-}
 
-impl MolecularFormula {
-    pub fn new(elements: IntMap<u8, usize>) -> Self {
-        Self { elements }
-    }
-    pub fn from_molecule(molecule: &(impl Molecule + ?Sized)) -> Self {
-        let mut formula = MolecularFormula::default();
-        for &atomic_number in molecule.atomic_numbers() {
-            *formula.elements.entry(atomic_number).or_insert(0) += 1;
+    pub fn rotate_around_center(&mut self, x_angle: f64, y_angle: f64, z_angle: f64) {
+        let center = self.center();
+        for position in self.positions.iter_mut() {
+            *position = position.rotate_around(center, x_angle, y_angle, z_angle);
         }
-        formula
-    }
-    pub fn elements(&self) -> &IntMap<u8, usize> {
-        &self.elements
-    }
-    /// Merges two molecular formulas.
-    ///
-    /// # Examples
-    /// ```
-    /// use molecules::molecule::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// let mut water_methane = water.clone();
-    /// water_methane.merge(&methane);
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(water, "H2O".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(methane, "CH4".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    ///
-    /// ```
-
-    pub fn merge(&mut self, other: &MolecularFormula) {
-        for (atom, count) in &other.elements {
-            *self.elements.entry(*atom).or_insert(0) += count;
-        }
-    }
-
-    /// Combines two molecular formulas.
-    /// # Examples
-    /// ```
-    /// use molecules::molecule::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// let water_methane = water.combine(&methane);
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    /// ```
-    pub fn combine(&self, other: &MolecularFormula) -> Self {
-        let mut combined = MolecularFormula::default();
-        for (atom, count) in &self.elements {
-            *combined.elements.entry(*atom).or_insert(0) += count;
-        }
-        for (atom, count) in &other.elements {
-            *combined.elements.entry(*atom).or_insert(0) += count;
-        }
-        combined
-    }
-    /// Calculates the monoisotopic mass of the molecular formula.
-    ///
-    /// # Examples
-    /// ```
-    /// use molecules::molecule::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// println!("{:?}", water);
-    /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
-    /// assert_eq!(methane.monoisotopic_mass(), 16.03130012892);
-    ///
-    /// ```
-    pub fn monoisotopic_mass(&self) -> f64 {
-        self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            // TODO check if this is safe
-            acc + atom.monoisotopic_mass().unwrap() * *count as f64
-        })
-    }
-
-    /// Calculates the molecular mass of the molecular formula.
-    /// # Examples
-    /// ```
-    /// use molecules::molecule::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// assert_eq!(water.molecular_mass().round(), 18.0);
-    /// assert_eq!(methane.molecular_mass().round(), 16.0);
-    pub fn molecular_mass(&self) -> f64 {
-        self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            // TODO check if this is safe
-            acc + atom.standard_atomic_weight().unwrap() * *count as f64
-        })
-    }
-}
-
-impl Display for MolecularFormula {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut elements = self
-            .elements
-            .iter()
-            .map(|(&atom, &count)| (atom.atomic_symbol().unwrap().to_string(), count))
-            .collect::<Vec<_>>();
-        elements.sort_by(|(atom1, _), (atom2, _)| atom1.cmp(atom2));
-        for (atom, count) in elements {
-            write!(f, "{}{}", atom.clone(), count)?;
-        }
-        Ok(())
-    }
-}
-
-use std::str::FromStr;
-
-#[derive(Debug)]
-pub struct ParseFormulaError;
-
-impl std::fmt::Display for ParseFormulaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "could not parse the provided string as a molecular formula"
-        )
-    }
-}
-
-impl std::error::Error for ParseFormulaError {}
-
-impl FromStr for MolecularFormula {
-    type Err = ParseFormulaError;
-
-    /// Parses a molecular formula from a string.
-    ///
-    /// # Panics
-    ///
-    /// This function does not panic. But it will ignore everything that is neither a number nor a
-    /// letter
-    ///
-    /// # Examples
-    /// ```
-    /// use molecules::molecule::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
-    /// assert_eq!(methane.monoisotopic_mass(), 16.03130012892);
-    ///
-    /// ```
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.is_empty() {
-            return Ok(MolecularFormula::default());
-        }
-        let mut number_buffer = String::new();
-        let mut element_buffer = String::new();
-        let mut elements: IntMap<u8, usize> = IntMap::default();
-        for character in s.chars() {
-            if character.is_alphabetic() {
-                if !element_buffer.is_empty() && character.is_uppercase() {
-                    let Some(atomic_number) = element_buffer.as_str().atomic_number() else {
-                        return Err(ParseFormulaError);
-                    };
-                    let count = if !number_buffer.is_empty() {
-                        number_buffer.parse::<usize>().unwrap_or(1)
-                    } else {
-                        1
-                    };
-                    *elements.entry(atomic_number).or_insert(0) += count;
-                    number_buffer.clear();
-                    element_buffer.clear();
-                }
-                element_buffer.push(character);
-            } else if character.is_numeric() {
-                number_buffer.push(character);
-            }
-        }
-        if !element_buffer.is_empty() {
-            let Some(atomic_number) = element_buffer.as_str().atomic_number() else {
-                return Err(ParseFormulaError);
-            };
-            let count = if !number_buffer.is_empty() {
-                number_buffer.parse::<usize>().unwrap_or(1)
-            } else {
-                1
-            };
-            *elements.entry(atomic_number).or_insert(0) += count;
-        }
-        Ok(MolecularFormula { elements })
     }
 }
 
