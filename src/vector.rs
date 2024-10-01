@@ -51,6 +51,27 @@ impl Mul<f64> for Vector {
     }
 }
 
+impl Mul<Vector> for Vector {
+    type Output = Vector;
+
+    /// Performs element-wise multiplication of two vectors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// let v1 = Vector::new(1.0, 2.0, 3.0);
+    /// let v2 = Vector::new(4.0, 5.0, 6.0);
+    /// let result = v1 * v2;
+    /// let delta = result - Vector::new(4.0, 10.0, 18.0);
+    /// assert!(delta.length() < 0.1);
+    /// ```
+    fn mul(self, other: Vector) -> Vector {
+        self.element_wise_mul(&other)
+    }
+}
+
 // Implement the Div trait for Vector
 impl Div<f64> for Vector {
     type Output = Vector;
@@ -109,6 +130,29 @@ impl Default for Vector {
         Vector::new(0.0, 0.0, 0.0)
     }
 }
+impl<'a> Mul<f64> for &'a Vector {
+    type Output = Vector;
+
+    fn mul(self, scalar: f64) -> Vector {
+        Vector {
+            x: self.x * scalar,
+            y: self.y * scalar,
+            z: self.z * scalar,
+        }
+    }
+}
+
+impl<'a> Div<f64> for &'a Vector {
+    type Output=Vector;
+
+    fn div(self, scalar: f64) -> Vector {
+        Vector {
+            x: self.x / scalar,
+            y: self.y / scalar,
+            z: self.z / scalar,
+        }
+    }
+}
 
 impl Vector {
     /// Creates a `Vector` from x, y, and z components.
@@ -123,9 +167,6 @@ impl Vector {
     pub const fn new_const(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
-}
-
-impl Vector {
     /// Creates a `Vector` from an array of 3 elements, representing the x, y, and z components.
     ///
     /// # Panics
@@ -165,14 +206,23 @@ impl Vector {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
-    pub fn x() -> Self {
+    pub fn unit_x() -> Self {
         Self::new(1.0, 0.0, 0.0)
     }
-    pub fn y() -> Self {
+    pub fn unit_y() -> Self {
         Self::new(0.0, 1.0, 0.0)
     }
-    pub fn z() -> Self {
+    pub fn unit_z() -> Self {
         Self::new(0.0, 0.0, 1.0)
+    }
+    pub fn x(&self) -> f64 {
+        self.x
+    } 
+    pub fn y(&self) -> f64 {
+        self.y
+    }
+    pub fn z(&self) -> f64 {
+        self.z
     }
     /// Calculates the difference between two `Vector` objects, this is equivalent to the vector
     /// pointing from `other` to `self`.
@@ -216,7 +266,7 @@ impl Vector {
     ///
     /// ```
     pub fn length(&self) -> f64 {
-        (self.squared_length()).sqrt()
+        self.squared_length().sqrt()
     }
 
     /// Alias for length. Returns the magnitude of the vector.
@@ -255,7 +305,7 @@ impl Vector {
     /// assert_eq!(v.squared_length(), 9.0);
     /// ```
     pub fn squared_length(&self) -> f64 {
-        self.x.powi(2) + self.y.powi(2) + self.z.powi(2)
+       self.dot(self) 
     }
 
     /// Determines if two vectors are parallel within a given tolerance.
@@ -336,8 +386,7 @@ impl Vector {
     /// assert_eq!(v1.distance_squared(&v2),27.0);
     /// ```
     pub fn distance_squared(&self, other: &Self) -> f64 {
-        let difference = *other - *self;
-        difference.x.powi(2) + difference.y.powi(2) + difference.z.powi(2)
+        self.difference(other).squared_length()
     }
     /// Generates a random unit vector
     ///
@@ -589,15 +638,15 @@ impl Vector {
     }
 
     pub fn rotate_around_x(&self, angle: f64) -> Vector {
-        self.rotate_around_axis(&Vector::x(), angle)
+        self.rotate_around_axis(&Vector::unit_x(), angle)
     }
 
     pub fn rotate_around_y(&self, angle: f64) -> Vector {
-        self.rotate_around_axis(&Vector::y(), angle)
+        self.rotate_around_axis(&Vector::unit_y(), angle)
     }
 
     pub fn rotate_around_z(&self, angle: f64) -> Vector {
-        self.rotate_around_axis(&Vector::z(), angle)
+        self.rotate_around_axis(&Vector::unit_z(), angle)
     }
 
     pub fn rotate_around(&self, center: Vector, x_angle: f64, y_angle: f64, z_angle: f64) -> Vector {
@@ -924,6 +973,25 @@ mod tests {
         let rotated = v.rotate_around(center, 0.0, 0.0, PI / 2.0);
         assert_vector_eq(&rotated, &Vector::new(0.0, 1.0, 0.0));
     }
+
+    #[test]
+    fn test_zero_vector_operations() {
+        let v = Vector::default();
+        let another = Vector::new(0.0, 0.0, 0.0);
+        assert_eq!(v + another, Vector::new(0.0, 0.0, 0.0));
+        assert_eq!(v * 5.0, Vector::new(0.0, 0.0, 0.0));
+        assert_eq!(v.dot(&another), 0.0);
+        assert_eq!(v.length(), 0.0);
+        assert_eq!(v.angle_between(&another), None);
+    }
+
+    #[test]
+    fn test_normalized_vector_operations() {
+        let v = Vector::new(3.0, 0.0, 0.0).normalize();
+        assert!((v.length() - 1.0).abs() < EPSILON);
+        let projected = Vector::new(1.0, 1.0, 0.0).project_onto(&v);
+        assert_eq!(projected, Vector::new(1.0, 0.0, 0.0));
+    }
 }
 
 impl From<[f64; 3]> for Vector {
@@ -937,4 +1005,3 @@ impl From<(f64, f64, f64)> for Vector {
         Vector::new(tuple.0, tuple.1, tuple.2)
     }
 }
-
