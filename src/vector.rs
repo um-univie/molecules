@@ -111,6 +111,21 @@ impl Default for Vector {
 }
 
 impl Vector {
+    /// Creates a `Vector` from x, y, and z components.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use molecules::vector::Vector;
+    ///
+    /// const V: Vector = Vector::new_const(1.0, 2.0, 3.0);
+    /// ```
+    pub const fn new_const(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+}
+
+impl Vector {
     /// Creates a `Vector` from an array of 3 elements, representing the x, y, and z components.
     ///
     /// # Panics
