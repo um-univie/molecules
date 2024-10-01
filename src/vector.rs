@@ -914,12 +914,15 @@ mod tests {
     }
 }
 
-use std::ops::Deref;
-
-impl Deref for Vector {
-    type Target = [f64; 3];
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { std::mem::transmute(self) }
+impl From<[f64; 3]> for Vector {
+    fn from(array: [f64; 3]) -> Self {
+        Vector::from_vec(&array)
     }
 }
+
+impl From<(f64, f64, f64)> for Vector {
+    fn from(tuple: (f64, f64, f64)) -> Self {
+        Vector::new(tuple.0, tuple.1, tuple.2)
+    }
+}
+
