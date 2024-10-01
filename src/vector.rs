@@ -913,3 +913,13 @@ mod tests {
         assert_vector_eq(&rotated, &Vector::new(0.0, 1.0, 0.0));
     }
 }
+
+use std::ops::Deref;
+
+impl Deref for Vector {
+    type Target = [f64; 3];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { std::mem::transmute(self) }
+    }
+}

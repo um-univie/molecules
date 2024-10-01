@@ -111,30 +111,77 @@ impl Molecule3D {
         self.chiral_classes = Some(chiral_classes);
     }
 
-    fn determine_cis_trans_chirality(&self, center_atom_index: usize, center_neighbors: &[BondTarget], chiral_classes: &mut [ChiralClass]) -> ChiralClass {
-        // Find the double bond neighbor
-        let double_bond_neighbor = center_neighbors.iter()
+    /// Determines the cis/trans chirality of a double bond between two atoms and assigns
+    /// the appropriate chiral classes using atom-based specification (`@` and `@@`).
+    ///
+    /// This method updates the `chiral_classes` array for both the central atom and its
+    /// double bond neighbor based on their spatial configuration. It ensures that each
+    /// chirality assignment is atom-specific, avoiding the complexities of bond-based
+    /// directional labels.
+    ///
+    /// # Arguments
+    ///
+    /// * `center_atom_index` - The index of the central atom in the double bond.
+    /// * `center_neighbors` - A slice of `BondTarget` representing the neighboring atoms
+    ///   bonded to the central atom.
+    /// * `chiral_classes` - A mutable slice of `ChiralClass` where the determined
+    ///   chirality will be stored.
+    ///
+    /// # Returns
+    ///
+    /// Returns the `ChiralClass` of the central atom after determination.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use molecules::molecule::{Molecule3D, Molecule};
+    /// use molecules::bond::BondTarget;
+    /// use molecules::chirality::ChiralClass;
+    /// 
+    /// let mut molecule = Molecule3D::from_sdf("tests/cis_2_butene.sdf").unwrap()[0].clone();
+    /// molecule.identify_chiral_classes();
+    /// let chiral_classes = molecule.chiral_classes().unwrap();
+    /// println!("{:?}", chiral_classes);
+    /// assert!(chiral_classes[0] == ChiralClass::Counterclockwise);
+    /// assert!(chiral_classes[1] == ChiralClass::Clockwise);
+    /// ```
+    pub fn determine_cis_trans_chirality(
+        &self,
+        center_atom_index: usize,
+        center_neighbors: &[BondTarget],
+        chiral_classes: &mut [ChiralClass],
+    ) -> ChiralClass {
+        // Identify the neighbor atom involved in the double bond
+        let double_bond_neighbor = center_neighbors
+            .iter()
             .find(|&bond| bond.bond_order() == BondOrder::Double)
             .map(|bond| bond.target());
-        
-        let Some(double_bond_neighbor_index) = double_bond_neighbor else {
-            return ChiralClass::None;
+
+        let double_bond_neighbor_index = match double_bond_neighbor {
+            Some(index) => index,
+            None => return ChiralClass::None,
         };
 
-        // Get the neighbors of the double bond neighbor
+        // Retrieve the bonds of the double bond neighbor
         let double_bond_neighbor_bonds = self.get_atom_bonds(double_bond_neighbor_index)
             .unwrap_or_default();
 
-        // Ensure we have two single bonds on each side of the double bond
+        // Validate that both the central atom and its double bond neighbor have exactly two single bonds
         if center_neighbors.len() != 3 || double_bond_neighbor_bonds.len() != 3 {
             return ChiralClass::None;
         }
 
-        // Get positions of all relevant atoms
-        let center_atom_position = self.get_atom_position(center_atom_index).unwrap();
-        let double_bond_neighbor_position = self.get_atom_position(double_bond_neighbor_index).unwrap();
+        // Obtain the spatial positions of the central atom and its double bond neighbor
+        let center_position = match self.get_atom_position(center_atom_index) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
+        let double_bond_neighbor_position = match self.get_atom_position(double_bond_neighbor_index) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
 
-        // Find the single bond neighbors for both sides
+        // Identify single bond neighbors excluding the double bond connection
         let center_single_bond_neighbors: Vec<_> = center_neighbors.iter()
             .filter(|&bond| bond.bond_order() == BondOrder::Single)
             .collect();
@@ -146,44 +193,56 @@ impl Molecule3D {
             return ChiralClass::None;
         }
 
-        // Get positions of single bond neighbors
-        let center_neighbor1_position = self.get_atom_position(center_single_bond_neighbors[0].target()).unwrap();
-        let center_neighbor2_position = self.get_atom_position(center_single_bond_neighbors[1].target()).unwrap();
-        let double_bond_neighbor1_position = self.get_atom_position(double_bond_single_neighbors[0].target()).unwrap();
-        let double_bond_neighbor2_position = self.get_atom_position(double_bond_single_neighbors[1].target()).unwrap();
+        // Retrieve positions of all single bond neighbors
+        let center_neighbor1_position = match self.get_atom_position(center_single_bond_neighbors[0].target()) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
+        let center_neighbor2_position = match self.get_atom_position(center_single_bond_neighbors[1].target()) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
+        let double_bond_neighbor1_position = match self.get_atom_position(double_bond_single_neighbors[0].target()) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
+        let double_bond_neighbor2_position = match self.get_atom_position(double_bond_single_neighbors[1].target()) {
+            Some(pos) => pos,
+            None => return ChiralClass::None,
+        };
 
-        // Calculate vectors
-        let center_neighbor1_vector = center_neighbor1_position - center_atom_position;
-        let center_neighbor2_vector = center_neighbor2_position - center_atom_position;
-        let double_bond_neighbor1_vector = double_bond_neighbor1_position - double_bond_neighbor_position;
-        let double_bond_neighbor2_vector = double_bond_neighbor2_position - double_bond_neighbor_position;
-        let double_bond_vector = double_bond_neighbor_position - center_atom_position;
+        // Compute vectors from central atoms to their single bond neighbors
+        let center_vector1 = center_neighbor1_position - center_position;
+        let center_vector2 = center_neighbor2_position - center_position;
+        let double_bond_vector1 = double_bond_neighbor1_position - double_bond_neighbor_position;
+        let double_bond_vector2 = double_bond_neighbor2_position - double_bond_neighbor_position;
+        let double_bond_axis = double_bond_neighbor_position - center_position;
 
-        // Calculate the axis perpendicular to the plane
-        let perpendicular_axis = double_bond_vector.cross(&center_neighbor1_position);
+        // Calculate the perpendicular axis to the double bond plane
+        let perpendicular_axis = double_bond_axis.cross(&center_vector1);
 
-        // Determine chirality for the center atom
-        let center_cross_product = center_neighbor1_vector.cross(&center_neighbor2_vector);
-        let center_chirality = if center_cross_product.dot(&perpendicular_axis) > 0.0 {
+        // Determine chirality of the central atom based on the orientation of its neighbors
+        let central_cross = center_vector1.cross(&center_vector2);
+        let central_chirality = if central_cross.dot(&perpendicular_axis) > 0.0 {
             ChiralClass::Counterclockwise
         } else {
             ChiralClass::Clockwise
         };
 
-        // Determine chirality for the double bond neighbor atom
-        let neighbor_cross_product = double_bond_neighbor1_vector.cross(&double_bond_neighbor2_vector);
-        let neighbor_chirality = if neighbor_cross_product.dot(&perpendicular_axis) > 0.0 {
+        // Determine chirality of the double bond neighbor atom based on the orientation of its neighbors
+        let neighbor_cross = double_bond_vector1.cross(&double_bond_vector2);
+        let neighbor_chirality = if neighbor_cross.dot(&perpendicular_axis) > 0.0 {
             ChiralClass::Counterclockwise
         } else {
             ChiralClass::Clockwise
         };
 
-        // Set the chirality for both atoms
-        chiral_classes[center_atom_index] = center_chirality;
+        // Assign the determined chirality to both atoms
+        chiral_classes[center_atom_index] = central_chirality;
         chiral_classes[double_bond_neighbor_index] = neighbor_chirality;
 
-        // Return the chirality of the center atom
-        center_chirality
+        // Return the chirality of the central atom
+        central_chirality
     }
     
     /// Determines the chirality of a square planar structure.

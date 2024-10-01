@@ -1525,7 +1525,6 @@ impl Molecule3D {
         molecules
     }
 
-
     pub fn rotate_around_center(&mut self, x_angle: f64, y_angle: f64, z_angle: f64) {
         let center = self.center();
         for position in self.positions.iter_mut() {
@@ -1637,10 +1636,8 @@ impl Node {
     }
 }
 
+/// This function tries to increase bonds in a greedy way to satisfy all bonds to saturate all atoms valence shells
 fn backtrack_bonding(molecule: &mut Molecule3D, degrees: &mut [i8]) -> bool {
-    // We can include the expected charge as an argument here that we have derived from the
-    // simulation summary file
-
     if degrees.iter().all(|&degree| degree >= 0) {
         return true;
     }

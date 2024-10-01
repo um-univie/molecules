@@ -1,4 +1,5 @@
 use chemistry_consts::ElementProperties;
+use crate::molecule::Molecule;
 use core::{
     fmt::{Display, Formatter},
     str::FromStr,
@@ -13,88 +14,6 @@ pub struct MolecularFormula {
     elements: IntMap<u8, usize>,
 }
 
-impl MolecularFormula {
-    pub fn new() -> Self {
-        MolecularFormula {
-            elements: IntMap::default(),
-        }
-    }
-    pub fn elements(&self) -> &IntMap<u8, usize> {
-        &self.elements
-    }
-    /// Merges two molecular formulas.
-    ///
-    /// # Examples
-    /// ```
-    /// use molecules::molecular_formula::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// let mut water_methane = water.clone();
-    /// water_methane.merge(&methane);
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(water, "H2O".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(methane, "CH4".parse::<MolecularFormula>().unwrap());
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    ///
-    /// ```
-
-    pub fn merge(&mut self, other: &MolecularFormula) {
-        for (atom, count) in &other.elements {
-            *self.elements.entry(*atom).or_insert(0) += count;
-        }
-    }
-    /// Combines two molecular formulas.
-    /// # Examples
-    /// ```
-    /// use molecules::molecular_formula::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// let water_methane = water.combine(&methane);
-    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
-    /// ```
-    pub fn combine(&self, other: &MolecularFormula) -> Self {
-        let mut combined = MolecularFormula::new();
-        for (atom, count) in &self.elements {
-            *combined.elements.entry(*atom).or_insert(0) += count;
-        }
-        for (atom, count) in &other.elements {
-            *combined.elements.entry(*atom).or_insert(0) += count;
-        }
-        combined
-    }
-    /// Calculates the monoisotopic mass of the molecular formula.
-    ///
-    /// # Examples
-    /// ```
-    /// use molecules::molecular_formula::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// println!("{:?}", water);
-    /// assert_eq!(water.monoisotopic_mass().round(), 18.0);
-    /// assert_eq!(methane.monoisotopic_mass().round(), 16.0);
-    ///
-    /// ```
-    pub fn monoisotopic_mass(&self) -> f64 {
-        self.elements.iter().fold(0.0, |acc, (atom, count)| {
-            acc + atom.monoisotopic_mass().unwrap() * *count as f64
-        })
-    }
-
-    /// Calculates the molecular mass of the molecular formula.
-    /// Since some elements do not have a standard atomic weight, this function returns an Option.
-    /// # Examples
-    /// ```
-    /// use molecules::molecular_formula::MolecularFormula;
-    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
-    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
-    /// assert_eq!(water.molecular_mass().unwrap().round(), 18.0);
-    /// assert_eq!(methane.molecular_mass().unwrap().round(), 16.0);
-    pub fn molecular_mass(&self) -> Option<f64> {
-        self.elements.iter().try_fold(0.0, |acc, (atom, count)| {
-            let standard_atomic_weight = atom.standard_atomic_weight()?;
-            Some(acc + standard_atomic_weight * *count as f64)
-        })
-    }
     //This is commented out due to a saftey issue with the fft crate
 
     // Calculates the isotopic pattern of the molecular formula.
@@ -231,11 +150,10 @@ impl MolecularFormula {
     //         .mapv(|v| v / total_distribution.sum())
     //         .to_vec()
     // }
-}
 
 impl Default for MolecularFormula {
     fn default() -> Self {
-        Self::new()
+        Self::new(IntMap::default())
     }
 }
 
@@ -291,7 +209,7 @@ impl FromStr for MolecularFormula {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty() {
-            return Ok(MolecularFormula::new());
+            return Err(ParseFormulaError);
         }
         let mut number_buffer = String::new();
         let mut element_buffer = String::new();
@@ -339,7 +257,7 @@ pub struct IsotopicPattern {
 }
 
 impl IsotopicPattern {
-    pub fn new(abundances: Vec<f64>, masses: Vec<f64>) -> Self {
+    pub fn new(abundances: &[f64], masses: &[f64]) -> Self {
         let mut buckets = IntMap::default();
         for (&intensity, &mass) in abundances.iter().zip(masses.iter()) {
             let mass_index = (PRECISION * mass).round() as usize;
@@ -370,8 +288,8 @@ impl IsotopicPattern {
     /// # Examples
     /// ```
     /// use molecules::molecular_formula::IsotopicPattern;
-    /// let mut pattern1 = IsotopicPattern::new(vec![0.5, 0.5], vec![1.0, 2.0]);
-    /// let pattern2 = IsotopicPattern::new(vec![0.5, 0.5], vec![3.0, 4.0]);
+    /// let mut pattern1 = IsotopicPattern::new(&vec![0.5, 0.5], &vec![1.0, 2.0]);
+    /// let pattern2 = IsotopicPattern::new(&vec![0.5, 0.5], &vec![3.0, 4.0]);
     /// let merged = pattern1.add(&pattern2);
     /// ```
     pub fn add(&mut self, other: &IsotopicPattern) {
@@ -387,7 +305,7 @@ impl IsotopicPattern {
     ///
     /// # Examples
     /// ```
-    /// use molecules::molecular_formula::IsotopicPattern; let mut pattern = IsotopicPattern::new(vec![0.5, 0.5], vec![1.0, 2.0]);
+    /// use molecules::molecular_formula::IsotopicPattern; let mut pattern = IsotopicPattern::new(&vec![0.5, 0.5], &vec![1.0, 2.0]);
     /// pattern.add_entry(1.0, 0.5);
     /// assert_eq!(pattern.buckets.len(), 2);
     /// ```
@@ -478,3 +396,98 @@ impl From<[f64; 2]> for Isotope {
         }
     }
 }
+
+
+impl MolecularFormula {
+    pub fn new(elements: IntMap<u8, usize>) -> Self {
+        Self { elements }
+    }
+    pub fn from_molecule(molecule: &(impl Molecule + ?Sized)) -> Self {
+        let mut formula = MolecularFormula::default();
+        for &atomic_number in molecule.atomic_numbers() {
+            *formula.elements.entry(atomic_number).or_insert(0) += 1;
+        }
+        formula
+    }
+    pub fn elements(&self) -> &IntMap<u8, usize> {
+        &self.elements
+    }
+    /// Merges two molecular formulas.
+    ///
+    /// # Examples
+    /// ```
+    /// use molecules::molecular_formula::MolecularFormula;
+    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
+    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
+    /// let mut water_methane = water.clone();
+    /// water_methane.merge(&methane);
+    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
+    /// assert_eq!(water, "H2O".parse::<MolecularFormula>().unwrap());
+    /// assert_eq!(methane, "CH4".parse::<MolecularFormula>().unwrap());
+    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
+    ///
+    /// ```
+
+    pub fn merge(&mut self, other: &MolecularFormula) {
+        for (atom, count) in &other.elements {
+            *self.elements.entry(*atom).or_insert(0) += count;
+        }
+    }
+
+    /// Combines two molecular formulas.
+    /// # Examples
+    /// ```
+    /// use molecules::molecular_formula::MolecularFormula;
+    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
+    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
+    /// let water_methane = water.combine(&methane);
+    /// assert_eq!(water_methane, "CH4H2O".parse::<MolecularFormula>().unwrap());
+    /// ```
+    pub fn combine(&self, other: &MolecularFormula) -> Self {
+        let mut combined = MolecularFormula::default();
+        for (atom, count) in &self.elements {
+            *combined.elements.entry(*atom).or_insert(0) += count;
+        }
+        for (atom, count) in &other.elements {
+            *combined.elements.entry(*atom).or_insert(0) += count;
+        }
+        combined
+    }
+    /// Calculates the monoisotopic mass of the molecular formula.
+    ///
+    /// # Examples
+    /// ```
+    /// use molecules::molecular_formula::MolecularFormula;
+    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
+    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
+    /// println!("{:?}", water);
+    /// assert_eq!(water.monoisotopic_mass(), 18.01056468403);
+    /// assert_eq!(methane.monoisotopic_mass(), 16.03130012892);
+    ///
+    /// ```
+    pub fn monoisotopic_mass(&self) -> f64 {
+        self.elements.iter().fold(0.0, |acc, (atom, count)| {
+            // TODO check if this is safe
+            acc + atom.monoisotopic_mass().unwrap() * *count as f64
+        })
+    }
+
+    /// Calculates the molecular mass of the molecular formula.
+    /// # Examples
+    /// ```
+    /// use molecules::molecular_formula::MolecularFormula;
+    /// let water = "H2O".parse::<MolecularFormula>().unwrap();
+    /// let methane = "CH4".parse::<MolecularFormula>().unwrap();
+    /// assert_eq!(water.molecular_mass().round(), 18.0);
+    /// assert_eq!(methane.molecular_mass().round(), 16.0);
+    pub fn molecular_mass(&self) -> f64 {
+        self.elements.iter().fold(0.0, |acc, (atom, count)| {
+            // TODO check if this is safe
+            acc + atom.standard_atomic_weight().unwrap() * *count as f64
+        })
+    }
+}
+
+
+
+
