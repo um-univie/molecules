@@ -72,7 +72,6 @@ impl Mul<Vector> for Vector {
     }
 }
 
-// Implement the Div trait for Vector
 impl Div<f64> for Vector {
     type Output = Vector;
 
@@ -84,7 +83,7 @@ impl Div<f64> for Vector {
         }
     }
 }
-// Implement the Sub trait for Vector
+
 impl Sub<Vector> for Vector {
     type Output = Vector;
     fn sub(self, rhs: Vector) -> Self::Output {
@@ -92,7 +91,6 @@ impl Sub<Vector> for Vector {
     }
 }
 
-// Implement the AddAssign trait for Vector
 impl AddAssign for Vector {
     fn add_assign(&mut self, other: Self) {
         self.x += other.x;
@@ -101,12 +99,30 @@ impl AddAssign for Vector {
     }
 }
 
-// Implement the MulAssign trait for Vector
 impl MulAssign<f64> for Vector {
     fn mul_assign(&mut self, scalar: f64) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
         self.z = self.z * scalar;
+    }
+
+}
+
+impl IntoIterator for Vector {
+    type Item = f64;
+    type IntoIter = std::array::IntoIter<f64, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.as_array().into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Vector {
+    type Item = &'a f64;
+    type IntoIter = std::array::IntoIter<&'a f64, 3>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [&self.x, &self.y, &self.z].into_iter()
     }
 }
 
