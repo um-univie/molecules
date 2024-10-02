@@ -69,8 +69,36 @@ enum AxisOrientation {
     None
 }
 
-impl Molecule3D {
-    pub fn identify_chiral_classes(&mut self) {
+pub trait ChiralClassifier {
+    fn identify_chiral_classes(&mut self);
+    fn determine_cis_trans_chirality(
+        &self,
+        center_atom_index: usize,
+        center_neighbors: &[BondTarget],
+        chiral_classes: &mut [ChiralClass],
+    ) -> ChiralClass;
+    fn determine_square_planar_chirality(&self, index: usize, neighbors: &[BondTarget]) -> ChiralClass;
+    fn determine_allene_chirality(&self, neighbors: &[BondTarget]) -> Option<ChiralClass>;  
+    fn determine_trigonal_bipyramidal_chirality(&self, index: usize, neighbors: &[BondTarget]) -> ChiralClass;
+    fn identify_axial_equatorial(&self, vectors_and_indices: &[(Vector, usize)]) -> (Vec<(usize, usize)>, Vec<(usize, usize)>);
+    fn determine_octahedral_chirality(&self, index: usize, neighbors: &[BondTarget]) -> ChiralClass;
+    fn identify_octahedral_configuration(&self, vectors: &[(Vector, usize)]) -> ((OctahedralShape, WindingDirection), (Vector, usize, usize), Vec<Vector>);
+    fn determine_shape(&self, v1: &Vector, v2: &Vector, v3: &Vector, v4: &Vector, axis: &Vector) -> (OctahedralShape, WindingDirection);
+    fn determine_tetrahedral_chirality(&self, index: usize, neighbors: &[BondTarget]) -> ChiralClass;
+    fn assign_oh_number(&self, shape: OctahedralShape, viewing_axis: &(Vector, usize, usize), winding: WindingDirection) -> u8;
+    fn determine_axis_direction(&self, viewing_axis: &(Vector, usize, usize)) -> (AxisDirection, AxisOrientation);
+    fn find_opposite_pairs(&self, vectors: &[(Vector,usize)]) -> Vec<((Vector,usize), (Vector,usize))>;
+    fn is_potential_octahedral(&self, neighbors: &[BondTarget]) -> bool;
+    fn is_potential_trigonal_bipyramidal(&self, neighbors: &[BondTarget]) -> bool;
+    fn is_potential_tetrahedral_center(&self, atomic_number: u8, neighbors: &[BondTarget]) -> bool;
+    fn is_tetrahedral_allene(&self, atomic_number: u8, neighbors: &[BondTarget]) -> bool;
+    fn is_potential_cis_trans(&self, neighbors: &[BondTarget]) -> bool;
+    fn calculate_plane(&self, center: usize, neighbors: &[BondTarget]) -> Option<Vector>;
+    fn is_chiral(&self) -> bool;
+}
+
+impl ChiralClassifier for Molecule3D {
+    fn identify_chiral_classes(&mut self) {
         if self.chiral_classes.is_some() {
             return;
         }
@@ -145,7 +173,7 @@ impl Molecule3D {
     /// assert!(chiral_classes[0] == ChiralClass::Counterclockwise);
     /// assert!(chiral_classes[1] == ChiralClass::Clockwise);
     /// ```
-    pub fn determine_cis_trans_chirality(
+    fn determine_cis_trans_chirality(
         &self,
         center_atom_index: usize,
         center_neighbors: &[BondTarget],
@@ -769,7 +797,7 @@ impl Molecule3D {
             && atomic_number != 34 // Selenium
     }
 
-    pub fn is_chiral(&self) -> bool {
+    fn is_chiral(&self) -> bool {
         self.chiral_classes()
             .unwrap_or_default()
             .iter()
@@ -781,7 +809,7 @@ impl Molecule3D {
 mod tests {
     use crate::prelude::*;
     use crate::molecule::Molecule3D;
-    use crate::chirality::ChiralClass;
+    use crate::chirality::{ChiralClassifier, ChiralClass};
     use crate::sdf::parse_sdf_file;
     use std::fs::File;
     use std::io::BufReader;

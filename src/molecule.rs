@@ -1,7 +1,7 @@
 use crate::{
     atom::Atom,
     bond::{BondOrder,BondTarget},
-    chirality::ChiralClass,
+    chirality::{ChiralClassifier, ChiralClass},
     consts::BOND_TOLERANCE,
     vector::Vector,
     molecular_formula::MolecularFormula
@@ -539,6 +539,9 @@ pub trait Molecule {
     }
 
     fn to_smiles(&self) -> String {
+        if self.atomic_numbers().is_empty() {
+            return String::new();
+        }
         let mut smiles = String::new();
         let components = self.get_components();
 
@@ -627,6 +630,7 @@ pub trait Molecule {
         }
         smiles
     }
+
     /// This function returns the rings in the molecule
     ///
     /// # Examples
@@ -760,6 +764,7 @@ impl Molecule for Molecule3D {
         molecule.identify_bonds(BOND_TOLERANCE);
         molecule
     }
+
 
 
 }
@@ -1535,6 +1540,13 @@ impl Molecule3D {
         for position in self.positions.iter_mut() {
             *position = position.rotate_around(center, x_angle, y_angle, z_angle);
         }
+    }
+
+    fn to_smiles_with_preprocessing(&mut self) -> String {
+        if self.chiral_classes().is_none() {
+            self.identify_chiral_classes();
+        }
+        self.to_smiles()
     }
 }
 
