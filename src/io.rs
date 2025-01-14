@@ -1,13 +1,14 @@
 use crate::atom::Atom;
 pub use crate::{
-            molecule::{Molecule, Molecule2D},
-            bond::{BondTarget,BondOrder},
-            chirality::ChiralClass
-            };
+    chirality::ChiralClass,
+    molecule::base::Molecule,
+    molecule::bond::{BondOrder, BondTarget},
+    molecule::molecule2d::Molecule2D,
+};
 pub use chemistry_consts::ElementProperties;
 pub use nohash_hasher::IntMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParseError {
     ElementNotFound(String),
     BondNotFound,
@@ -33,17 +34,19 @@ pub struct SMILESParser {
     current_atom_class: Option<u8>,
     last_bond_type: BondOrder,
     ring_number: Option<usize>,
-    ring_bonds: IntMap<usize, (Option<usize>, Option<usize>)>,
-    ring_atoms: Vec<usize>,
+    ring_bonds: IntMap<usize, (Option<usize>, Option<usize>, Option<BondOrder>)>,
+    rings: Vec<(usize,usize,BondOrder)>,
     hydrogens: IntMap<usize, u8>,
     branch_stack: Vec<usize>,
     branch_exits: usize,
     is_multiple_branch: bool,
     is_double_digit: bool,
-    is_aromatic: bool,
 }
 
 impl SMILESParser {
+    pub fn atoms(&self) -> &[Atom] {
+        &self.atoms
+    }
     /// Parses a SMILES string and returns a Molecule
     /// # Arguments
     /// * `smiles` - A string slice that holds the SMILES string
@@ -59,6 +62,7 @@ impl SMILESParser {
         let mut molecules = SMILESParser::parse_smiles_raw(smiles)?;
         for molecule in molecules.iter_mut() {
             molecule.add_hydrogens();
+            molecule.add_aromatic_bonds();
         }
         Ok(molecules)
     }
@@ -115,7 +119,8 @@ impl SMILESParser {
                 b'.' => {
                     parser.handle_atom(None)?;
                     parser.add_all_bonds();
-                    molecules.push(Molecule2D::from_atoms(parser.atoms));
+                    let molecule = Molecule2D::from_atoms(parser.atoms);
+                    molecules.push(molecule);
                     parser = SMILESParser::default();
                 }
 
@@ -161,34 +166,85 @@ impl SMILESParser {
         }
 
         parser.add_all_bonds();
-
-        molecules.push(Molecule2D::from_atoms(parser.atoms));
+        let molecule = Molecule2D::from_atoms(parser.atoms);
+        molecules.push(molecule);
         Ok(molecules)
     }
 
+    /// Adds all bonds to the current molecule, ensuring aromatic bonds are correctly assigned.
+    ///
+    /// This method processes ring bonds and explicit hydrogen bonds, assigning the appropriate
+    /// bond orders based on the aromaticity of the connected atoms.
+    ///
+    /// Aromatic bonds between two aromatic atoms are marked as `BondOrder::Aromatic`.
+    /// All other bonds default to their parsed bond orders.
     fn add_all_bonds(&mut self) {
-        for (start, end) in self.ring_bonds.values() {
-            if start.is_some() && end.is_some() {
-                self.bonds
-                    .push((start.unwrap(), end.unwrap(), BondOrder::Aromatic));
+        for entry in self.ring_bonds.iter() {
+            match (entry.1.0, entry.1.1) {
+                (Some(start_idx), Some(end_idx)) => self.rings.push((start_idx, end_idx, entry.1.2.unwrap_or(BondOrder::Single))),
+                (None, None) => (),
+                _ => ()
             }
         }
 
-        for (atom, number) in self.hydrogens.iter() {
-            let hydrogen_index = self.current_atom_index;
-            for index in 0..*number {
-                self.atoms.push(Atom::new(1));
+
+        for (start_idx, end_idx, order) in self.rings.iter() {
+                if *start_idx >= self.atoms.len() || *end_idx >= self.atoms.len() {
+                    continue; // Skip invalid bonds
+                }
+
+                // This is false if they are not in the same system
+                let bond_order = if self.atoms[*start_idx].aromatic && self.atoms[*end_idx].aromatic
+                {
+                    BondOrder::Aromatic
+                } else {
+                    *order
+                };
+
+                self.bonds.push((*start_idx, *end_idx, bond_order));
+        }
+
+        for (atom_index, hydrogen_count) in self.hydrogens.iter() {
+            for _ in 0..*hydrogen_count {
+                let hydrogen_index = self.atoms.len();
+                self.atoms.push(Atom::new(1)); // Hydrogen
                 self.bonds
-                    .push((*atom, hydrogen_index + index as usize, BondOrder::Single));
+                    .push((*atom_index, hydrogen_index, BondOrder::Single));
+                //println!(
+                //    "Bond added between Atom {} and Hydrogen {} with bond order {:?} in add_all_bonds",
+                //    atom_index, hydrogen_index, BondOrder::Single
+                //);
             }
         }
 
-        // Add bonds to the molecule
-        for bond in self.bonds.iter() {
+        // Assign bonds to the molecule
+        for bond in self.bonds.iter_mut() {
+            // Ensure bond indices are within bounds
+            if bond.0 >= self.atoms.len() || bond.1 >= self.atoms.len() {
+                println!(
+                    "Error: Bond indices out of bounds: bond.0={}, bond.1={}, atoms.len={}",
+                    bond.0,
+                    bond.1,
+                    self.atoms.len()
+                );
+                continue; // Skip invalid bonds
+            }
+
             let atom1 = &mut self.atoms[bond.0];
             atom1.add_bond(BondTarget::new(bond.1, bond.2));
             let atom2 = &mut self.atoms[bond.1];
             atom2.add_bond(BondTarget::new(bond.0, bond.2));
+        }
+
+        for index in 0..self.atoms.len() {
+            let is_atom_aromatic = self.atoms[index].aromatic;
+            for bond_index in 0..self.atoms[index].bonds.len() {
+                let bond = &self.atoms[index].bonds[bond_index];
+                let is_bond_target_aromatic = self.atoms[bond.target].aromatic;
+                if is_atom_aromatic && is_bond_target_aromatic {
+                    self.atoms[index].bonds[bond_index].bond_order = BondOrder::Aromatic;
+                }
+            }
         }
     }
 
@@ -224,53 +280,88 @@ impl SMILESParser {
         }
         Ok(())
     }
+
+    /// Handles the creation of a bond between the current atom and the previous atom.
+    ///
+    /// This method determines the bond order based on the last bond type parsed
+    /// and the aromaticity of the connected atoms. If both atoms are aromatic,
+    /// the bond is set to `BondOrder::Aromatic`, overriding any previously assigned bond order.
+    ///
     fn handle_bond(&mut self) -> Result<(), ParseError> {
         if self.current_atom_index == 0 {
-            return Ok(());
+            return Ok(()); // No bond to handle if it's the first atom
         }
+
         if self.branch_exits > 0 && !self.branch_stack.is_empty() {
-            self.handle_branch()?
+            self.handle_branch()?;
         } else {
-            self.bonds.push((
-                self.current_atom_index - 1,
-                self.current_atom_index,
-                self.last_bond_type,
-            ));
+            let previous_atom = self.current_atom_index - 1;
+            let current_atom = self.current_atom_index;
+
+            let bond_order = if let (Some(prev_atom), Some(curr_atom)) =
+                (self.atoms.get(previous_atom), self.atoms.get(current_atom))
+            {
+                // Check if both connected atoms are aromatic
+                if prev_atom.aromatic && curr_atom.aromatic {
+                    BondOrder::Aromatic
+                } else {
+                    // Otherwise, use the last bond type parsed
+                    self.last_bond_type
+                }
+            } else {
+                self.last_bond_type
+            };
+
+            // Add the bond and print debug information
+            self.bonds.push((previous_atom, current_atom, bond_order));
         }
-        self.last_bond_type = BondOrder::Single;
+        self.last_bond_type = BondOrder::Single; // Reset to default bond type
         Ok(())
     }
 
+    /// Handles the parsing of an atom in the SMILES string.
+    ///
+    /// This method processes the current element buffer, determines the atomic number,
+    /// and updates the atom's properties such as aromaticity, isotope, chiral class, and charge.
+    ///
+    /// If the `byte` parameter is provided, it indicates the next character in the SMILES string
+    /// and may influence the bond type.
+    ///
+    /// # Arguments
+    ///
+    /// * `byte` - An optional byte representing the next character in the SMILES string.
+    ///
     fn handle_atom(&mut self, byte: Option<u8>) -> Result<(), ParseError> {
         if !self.element_buffer.is_empty() {
-            let atomic_number = &self
+            let atomic_number = self
                 .element_buffer
                 .to_uppercase()
                 .as_str()
                 .atomic_number()
-                .ok_or(ParseError::ElementNotFound(self.element_buffer.to_owned()))?;
+                .ok_or(ParseError::ElementNotFound(self.element_buffer.clone()))?;
 
-            let mut atom = Atom::new(*atomic_number).with_atom_class(self.current_atom_class);
+            let mut atom = Atom::new(atomic_number).with_atom_class(self.current_atom_class);
 
             self.current_atom_index += 1;
 
-            // TODO check if this is correct
+            // Determine aromaticity based on lowercase symbol or aromatic flag
+            if self.element_buffer.chars().next().unwrap().is_lowercase() {
+                atom.aromatic = true;
+            }
+
+            // Handle bond if additional byte is present
             if byte.is_some() {
                 self.handle_bond()?
             }
 
-            if self.element_buffer.chars().next().unwrap().is_lowercase() || self.is_aromatic {
-                atom = Atom::new(*atomic_number);
-            }
-
             if let Some(isotope) = self.isotope {
-                if is_valid_isotope(*atomic_number, isotope) {
+                if is_valid_isotope(atomic_number, isotope) {
                     atom = atom.with_isotope(isotope);
                     self.isotope = None;
                 } else {
                     println!(
                         "Isotope {} is not valid for atomic number {}, skipping it",
-                        isotope, *atomic_number
+                        isotope, atomic_number
                     );
                 }
             }
@@ -288,46 +379,69 @@ impl SMILESParser {
             self.atoms.push(atom);
             self.element_buffer.clear();
         }
-        let Some(character_byte) = byte else {
-            return Ok(());
-        };
-        self.element_buffer.push(character_byte as char);
+
+        if let Some(character_byte) = byte {
+            self.element_buffer.push(character_byte as char);
+        }
+
         Ok(())
     }
 
-    // TODO handle invalid ring numbers
+    /// Handles numeric characters in SMILES strings, particularly for ring closures
+    ///
+    /// # Arguments
+    /// * `byte` - ASCII byte representing a digit (1-9)
+    ///
+    /// # Returns
+    /// * `Result<(), ParseError>` - Ok if number handled successfully, Err if invalid ring format
     fn handle_number(&mut self, byte: u8) -> Result<(), ParseError> {
+        // Handle double-digit ring numbers (after %)
         if self.is_double_digit {
-            if let Some(ring_number_value) = self.ring_number {
-                // TODO make this generic for any size
-                self.ring_number = Some(ring_number_value * 10 + byte_to_number(byte) as usize);
-                self.is_double_digit = false;
-            } else {
-                self.ring_number = Some(byte_to_number(byte) as usize);
-                return Ok(());
+            let digit = byte_to_number(byte) as usize;
+            self.ring_number = Some(match self.ring_number {
+                Some(existing) => existing * 10 + digit,
+                None => digit,
+            });
+            self.is_double_digit = false;
+            return Ok(());
+        }
+
+        // Handle single-digit ring numbers
+        if self.ring_number.is_none() {
+            self.ring_number = Some(byte_to_number(byte) as usize);
+        }
+
+        // Process the complete ring number
+        let ring = self.ring_number.take().unwrap();
+        let entry = self.ring_bonds.entry(ring).or_insert((None, None, None));
+
+        match (entry.0, entry.1) {
+            (None, _) => {
+                entry.0 = Some(self.current_atom_index);
+                entry.2 = Some(self.last_bond_type); // Store bond order when first encountered
+            },
+            (Some(_), None) => {
+                entry.1 = Some(self.current_atom_index);
+                entry.2 = Some(self.last_bond_type);
+            },
+            _ => {
+                // Ring closure is complete, create new entry
+                self.rings.push((
+                    entry.0.unwrap(),
+                    entry.1.unwrap(),
+                    entry.2.unwrap_or(BondOrder::Single)
+                ));
+                *entry = (Some(self.current_atom_index), None, Some(self.last_bond_type));
             }
         }
 
-        let Some(ring) = self.ring_number else {
-            return Ok(());
-        };
+        self.last_bond_type = BondOrder::Single; // Reset bond type after handling
 
-        let (start, end) = self.ring_bonds.entry(ring).or_insert((None, None));
-        // If start is None, then we are at the start of the bond
-        if start.is_none() {
-            *start = Some(self.current_atom_index);
-        } else if end.is_none() {
-            *end = Some(self.current_atom_index);
-        } else {
+        // Validate that the ring closure isn't connecting an atom to itself
+        if entry.0 == entry.1 && entry.1.is_some() {
             return Err(ParseError::RingIndexError);
         }
 
-        // This means we have invaid format e.g. C11 instead of C1 or C%11
-        if start == end {
-            return Err(ParseError::RingIndexError);
-        }
-
-        self.ring_number = None;
         Ok(())
     }
 
@@ -354,23 +468,21 @@ impl SMILESParser {
             b"se" => {
                 is_se_or_as = true;
                 self.element_buffer.push_str("SE");
-                self.is_aromatic = true;
             }
             b"as" => {
                 is_se_or_as = true;
                 self.element_buffer.push_str("AS");
-                self.is_aromatic = true;
             }
             _ => (),
         }
 
-        if bytes[*position].is_ascii_uppercase() && !is_se_or_as {
+        if bytes[*position].is_ascii() && !is_se_or_as {
             self.element_buffer.push(bytes[*position] as char);
             if bytes[*position + 1].is_ascii_lowercase() {
                 *position += 1;
                 self.element_buffer.push(bytes[*position] as char);
             }
-        }
+        } 
 
         *position += 1;
         let start_position = *position;
@@ -394,6 +506,7 @@ impl SMILESParser {
                 *position += 1;
             }
             self.chiral_class = parse_chiral_class(&bytes[start_position..*position])?;
+
         }
 
         if bytes[*position] == b'H' {
@@ -402,6 +515,7 @@ impl SMILESParser {
             if bytes[*position].is_ascii_digit() {
                 self.hydrogens
                     .insert(self.current_atom_index, byte_to_number(bytes[*position]));
+                *position += 1;
             } else {
                 self.hydrogens.insert(self.current_atom_index, 1);
             }
@@ -416,13 +530,13 @@ impl SMILESParser {
                     b'-' => {
                         self.current_atom_charge = Some(-(byte_to_number(bytes[*position]) as i8))
                     }
-                    _ => (), // This should never happen
+                    _ => (), // This cant happen
                 }
             } else {
                 match sign {
                     b'+' => self.current_atom_charge = Some(1),
                     b'-' => self.current_atom_charge = Some(-1),
-                    _ => (), // This should never happen
+                    _ => (), // This cant happen
                 }
             }
         }
@@ -504,11 +618,21 @@ pub trait FromSMILES {
     fn from_smiles(smiles: &str) -> Result<Vec<Self>, ParseError>
     where
         Self: Sized;
+    fn from_smiles_with_sanitization(smiles: &str) -> Result<Vec<Self>, ParseError>
+    where 
+        Self: Sized;
 }
 
 impl FromSMILES for Molecule2D {
     fn from_smiles(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
         let molecules = SMILESParser::parse_smiles(smiles)?;
+        Ok(molecules)
+    }
+    fn from_smiles_with_sanitization(smiles: &str) -> Result<Vec<Molecule2D>, ParseError> {
+        let mut molecules = SMILESParser::parse_smiles(smiles)?;
+        for molecule in molecules.iter_mut() {
+            molecule.add_aromatic_bonds();
+        }
         Ok(molecules)
     }
 }
@@ -586,5 +710,91 @@ mod tests {
         let molecules = SMILESParser::parse_smiles("C(C(C))COCCl.C(C(C))").unwrap();
         let submolecule = molecules[0].match_submolecule(&molecules[1]);
         assert_eq!(submolecule, None);
+    }
+
+    #[test]
+    fn test_ring_closure_with_charge() {
+        let molecules = SMILESParser::parse_smiles("c1ccc2c(c1)=[NH+]C(=O)C=2Nc1ccc(C(OCCC)=O)cc1").unwrap();
+
+        println!("Molecule: {}", molecules[0].to_smiles());
+        assert_eq!(molecules[0].atomic_numbers.len(), 33);
+    }
+
+    #[test]
+    fn test_parse_smiles_with_charged_atoms() {
+        // Test positive charges
+        let molecules = SMILESParser::parse_smiles("[NH4+]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 5);  // N + 4H
+        assert_eq!(molecules[0].get_atom_charge(0), 1);
+
+        // Test negative charges
+        let molecules = SMILESParser::parse_smiles("[O-]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 2); // O + 1H automatically added
+        assert_eq!(molecules[0].get_atom_charge(0), -1); 
+
+        // Test multiple charges
+        let molecules = SMILESParser::parse_smiles("[NH3+][O-]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 5);  // N + 3H + O
+        assert_eq!(molecules[0].get_atom_charge(0), 1);
+        assert_eq!(molecules[0].get_atom_charge(1), -1); // Hydrogens are added last
+    }
+
+    #[test]
+    fn test_parse_smiles_with_explicit_hydrogens() {
+        // Test NH2 group
+        let molecules = SMILESParser::parse_smiles("[NH2]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 4);  // N + 2H + 1H automatically added
+        
+        // Test CH3 group
+        let molecules = SMILESParser::parse_smiles("[CH3]").unwrap();
+        println!("{:?}", molecules[0].atomic_numbers);
+        assert_eq!(molecules[0].atomic_numbers.len(), 5);  // C + 3H + 1H automatically added
+        
+        // Test complex molecule with explicit hydrogens
+        let molecules = SMILESParser::parse_smiles("[CH3][NH2]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 7);  // C + 3H + N + 2H
+        assert_eq!(molecules[0].get_edges().len(), 6);     // All single bonds
+    }
+
+    #[test]
+    fn test_parse_smiles_with_charged_complex_molecules() {
+        // Test zwitterion (amino acid-like structure)
+        let molecules = SMILESParser::parse_smiles("[NH3+]CC[O-]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 11);  // N + 3H + 2C + O + 4H automatically added
+        assert_eq!(molecules[0].get_atom_charge(0), 1);
+        assert_eq!(molecules[0].get_atom_charge(6), -1);
+        
+        // Test multiple charged centers
+        let molecules = SMILESParser::parse_smiles("[NH4+]CC[NH3+]").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 10); // 2N + 7H + 2C
+        assert_eq!(molecules[0].get_atom_charge(0), 1);
+        assert_eq!(molecules[0].get_atom_charge(6), 1);
+    }
+}
+
+#[cfg(test)]
+mod aromatic_bond_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_aromatic_bonds() {
+        let molecules = SMILESParser::parse_smiles("c1ccccc1").unwrap();
+        assert_eq!(molecules[0].atomic_numbers.len(), 12);
+        assert_eq!(molecules[0].get_edges().len(), 12);
+        let mut aromatic_bonds = 0;
+        for bond in molecules[0].get_edges_with_type().into_iter() {
+            if bond.2 == BondOrder::Aromatic {
+                aromatic_bonds += 1;
+            }
+        }
+        assert_eq!(aromatic_bonds, 6);
+    }
+
+    #[test]
+    fn test_parse_mixed_bonds_with_aromatic_atoms() {
+        let molecules = SMILESParser::parse_smiles("C1=CC=CC=C1").unwrap();
+
+        assert_eq!(molecules[0].atomic_numbers.len(), 12);
+        assert_eq!(molecules[0].get_edges().len(), 12);
     }
 }

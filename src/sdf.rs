@@ -1,13 +1,16 @@
-use std::str::FromStr;
+use crate::io::BondTarget;
+use crate::{
+    molecule::bond::{Bond, BondOrder},
+    molecule::molecule3d::Molecule3D,
+    vector::Vector,
+};
+use chemistry_consts::ElementProperties;
+use std::collections::HashMap;
+use std::io::{self, BufRead, BufReader};
 use std::num::ParseFloatError;
 use std::num::ParseIntError;
-use std::collections::HashMap;
-use crate::io::BondTarget;
-use crate::{vector::Vector,bond::{Bond,BondOrder},molecule::Molecule3D};  
-use std::io::{self, BufRead, BufReader};
-use chemistry_consts::ElementProperties;
+use std::str::FromStr;
 use tinyvec::ArrayVec;
-
 
 /// Represents an atom in the V2000 format of an SDF file.
 ///
@@ -44,9 +47,6 @@ pub struct AtomV2000 {
     pub inversion_retention_flag: Option<u8>,
     /// Exact change flag for reactions (0 = property not applied, 1 = property applied)
     pub exact_change_flag: Option<u8>,
-
-
-    
 }
 
 impl FromStr for AtomV2000 {
@@ -67,9 +67,18 @@ impl FromStr for AtomV2000 {
         }
 
         Ok(AtomV2000 {
-            x: input[0..10].trim().parse().map_err(SDFParseError::ParseFloatError)?,
-            y: input[10..20].trim().parse().map_err(SDFParseError::ParseFloatError)?,
-            z: input[20..30].trim().parse().map_err(SDFParseError::ParseFloatError)?,
+            x: input[0..10]
+                .trim()
+                .parse()
+                .map_err(SDFParseError::ParseFloatError)?,
+            y: input[10..20]
+                .trim()
+                .parse()
+                .map_err(SDFParseError::ParseFloatError)?,
+            z: input[20..30]
+                .trim()
+                .parse()
+                .map_err(SDFParseError::ParseFloatError)?,
             symbol: input[31..34].trim().to_string(),
             isotope_mass_difference: input[34..36].trim().parse().ok(),
             formal_charge: input[36..39].trim().parse().ok(),
@@ -84,7 +93,6 @@ impl FromStr for AtomV2000 {
         })
     }
 }
-
 
 impl Bond {
     /// Parses a bond from a MOL file line.
@@ -106,8 +114,14 @@ impl Bond {
             return Err("Could not parse bond in sdf line".into());
         }
 
-        let atom1 = parts.get(0).ok_or("Missing atom1 in bond line")?.parse::<usize>()?;
-        let atom2 = parts.get(1).ok_or("Missing atom2 in bond line")?.parse::<usize>()?;
+        let atom1 = parts
+            .get(0)
+            .ok_or("Missing atom1 in bond line")?
+            .parse::<usize>()?;
+        let atom2 = parts
+            .get(1)
+            .ok_or("Missing atom2 in bond line")?
+            .parse::<usize>()?;
 
         Ok(Bond {
             atom1: atom1.checked_sub(1).ok_or("atom1 index underflow")?,
@@ -135,13 +149,9 @@ impl FromStr for CountsLine {
             return Err("Counts line to short".into());
         }
 
-        let parse_u16 = |s: &str| -> Result<u16, ParseIntError> {
-            s.trim().parse::<u16>()
-        };
+        let parse_u16 = |s: &str| -> Result<u16, ParseIntError> { s.trim().parse::<u16>() };
 
-        let parse_u8 = |s: &str| -> Result<u8, ParseIntError> {
-            s.trim().parse::<u8>()
-        };
+        let parse_u8 = |s: &str| -> Result<u8, ParseIntError> { s.trim().parse::<u8>() };
 
         Ok(CountsLine {
             num_atoms: parse_u16(&s[0..3])?,
@@ -157,16 +167,16 @@ impl FromStr for CountsLine {
 
 pub enum MolVersion {
     V2000,
-    V3000
+    V3000,
 }
 
-impl FromStr for MolVersion { 
+impl FromStr for MolVersion {
     type Err = Box<dyn std::error::Error>;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "V2000" => Ok(MolVersion::V2000),
             "V3000" => Ok(MolVersion::V3000),
-            _ =>  Err("Invalid mol version {}, only V2000 and V3000 are supported".into())
+            _ => Err("Invalid mol version {}, only V2000 and V3000 are supported".into()),
         }
     }
 }
@@ -194,7 +204,6 @@ pub struct CountsLine {
     pub num_properties: u16,
     pub version: String,
 }
-
 
 /// Represents the structure of a MOL file, which is a common format for describing molecular structures.
 ///
@@ -274,56 +283,49 @@ where
                 mol_file.counts_line = line;
                 ParserState::Atoms
             }
-            ParserState::Atoms => {
-                match AtomV2000::from_str(&line) {
-                    Ok(atom) => {
-                        mol_file.atoms.push(atom);
-                        ParserState::Atoms
+            ParserState::Atoms => match AtomV2000::from_str(&line) {
+                Ok(atom) => {
+                    mol_file.atoms.push(atom);
+                    ParserState::Atoms
+                }
+                Err(_) => match Bond::from_mol_line(&line) {
+                    Ok(bond) => {
+                        mol_file.bonds.push(bond);
+                        ParserState::Bonds
                     }
                     Err(_) => {
-                        match Bond::from_mol_line(&line) {
-                            Ok(bond) => {
-                                mol_file.bonds.push(bond);
-                                ParserState::Bonds
-                            }
-                            Err(_) => {
-                                if line.trim() == "M  END" {
-                                    return Ok(mol_file);
-                                } else {
-                                    ParserState::Properties
-                                }
-                            }
+                        if line.trim() == "M  END" {
+                            return Ok(mol_file);
+                        } else {
+                            ParserState::Properties
                         }
                     }
+                },
+            },
+            ParserState::Bonds => match Bond::from_mol_line(&line) {
+                Ok(bond) => {
+                    mol_file.bonds.push(bond);
+                    ParserState::Bonds
                 }
-            }
-                ParserState::Bonds => {
-                    match Bond::from_mol_line(&line) {
-                        Ok(bond) => {
-                            mol_file.bonds.push(bond);
-                            ParserState::Bonds
-                        }
-                        Err(_) => {
-                            if line.trim() == "M  END" {
-                                return Ok(mol_file);
-                            } else {
-                                ParserState::Properties
-                            }
-                        }
-                    }
-                }
-                ParserState::Properties => {
-                    println!("Property line: {}", line);
+                Err(_) => {
                     if line.trim() == "M  END" {
                         return Ok(mol_file);
                     } else {
-
-                mol_file.properties.push(line);
-                ParserState::Properties
+                        ParserState::Properties
+                    }
+                }
+            },
+            ParserState::Properties => {
+                println!("Property line: {}", line);
+                if line.trim() == "M  END" {
+                    return Ok(mol_file);
+                } else {
+                    mol_file.properties.push(line);
+                    ParserState::Properties
+                }
             }
-        }
-    };
-}
+        };
+    }
 
     Err(ParseError::UnexpectedEndOfFile)
 }
@@ -358,9 +360,14 @@ pub fn parse_sdf_file<R: BufRead>(reader: R) -> Result<Vec<SDFEntry>, SDFParseEr
                         in_mol_block = true;
                     } else if let Some(stripped) = line.strip_prefix("> ") {
                         // Remove < and > from the data field name
-                        current_data_field_name = stripped.replace("<", "").replace(">", "").trim().to_string();
+                        current_data_field_name = stripped
+                            .replace("<", "")
+                            .replace(">", "")
+                            .trim()
+                            .to_string();
                     } else if !current_data_field_name.is_empty() {
-                        current_data_fields.entry(current_data_field_name.clone())
+                        current_data_fields
+                            .entry(current_data_field_name.clone())
                             .or_insert(String::new())
                             .push_str(line.trim());
                     }
@@ -423,13 +430,12 @@ pub struct MoleculeV2000 {
     pub dimension: u8,
 }
 
-
 use std::path::Path;
 impl Molecule3D {
-    pub fn from_sdf<T: AsRef<Path>>(sdf: T) -> Result<Vec<Self>, SDFParseError>{
+    pub fn from_sdf<T: AsRef<Path>>(sdf: T) -> Result<Vec<Self>, SDFParseError> {
         let file = std::fs::File::open(sdf)?;
         let reader = BufReader::new(file);
-        let sdf_entries = parse_sdf_file(reader)?; 
+        let sdf_entries = parse_sdf_file(reader)?;
         Self::from_sdf_entries(sdf_entries)
     }
 
@@ -441,35 +447,42 @@ impl Molecule3D {
             let mut atomic_numbers = vec![];
             let mut charges = vec![];
             let mut positions = vec![];
-            
+
             for atom in entry.mol_file.atoms {
                 let atom_charge = atom.formal_charge.unwrap_or(0);
-                atomic_numbers.push(atom.symbol.to_uppercase().as_str().atomic_number().ok_or(SDFParseError::InvalidAtom(atom.symbol.to_string()))?);
+                atomic_numbers.push(
+                    atom.symbol
+                        .to_uppercase()
+                        .as_str()
+                        .atomic_number()
+                        .ok_or(SDFParseError::InvalidAtom(atom.symbol.to_string()))?,
+                );
                 charges.push(atom_charge);
                 positions.push(Vector::new(atom.x, atom.y, atom.z));
             }
 
             let mut bonds = vec![ArrayVec::<[BondTarget; 10]>::new(); number_of_atoms];
             for bond in entry.mol_file.bonds {
-                bonds.get_mut(bond.atom1).ok_or(SDFParseError::InvalidBond)?.push(BondTarget::new(bond.atom2, bond.bond_order));
-                bonds.get_mut(bond.atom2).ok_or(SDFParseError::InvalidBond)?.push(BondTarget::new(bond.atom1, bond.bond_order));
+                bonds
+                    .get_mut(bond.atom1)
+                    .ok_or(SDFParseError::InvalidBond)?
+                    .push(BondTarget::new(bond.atom2, bond.bond_order));
+                bonds
+                    .get_mut(bond.atom2)
+                    .ok_or(SDFParseError::InvalidBond)?
+                    .push(BondTarget::new(bond.atom1, bond.bond_order));
             }
-            molecules.push(
-                Molecule3D {
-                    charges,
-                    positions,
-                    atomic_numbers,
-                    atom_bonds: bonds,
-                    ..Default::default()
-                }
-            )
+            molecules.push(Molecule3D {
+                charges,
+                positions,
+                atomic_numbers,
+                atom_bonds: bonds,
+                ..Default::default()
+            })
         }
 
-        Ok(
-            molecules
-        )
+        Ok(molecules)
     }
-
 }
 
 #[cfg(test)]
@@ -615,7 +628,7 @@ $$$$
         let reader = Cursor::new(sdf_content);
         let result = parse_sdf_file(reader);
         assert!(result.is_ok());
-        
+
         let entries = result.unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -624,8 +637,10 @@ $$$$
         assert_eq!(first.mol_file.atoms.len(), 11);
         assert_eq!(first.mol_file.bonds.len(), 8);
         assert_eq!(first.data_fields.len(), 34);
-        assert_eq!(first.data_fields.get("PUBCHEM_COMPOUND_CID"), Some(&"5460033".to_string()));
-
+        assert_eq!(
+            first.data_fields.get("PUBCHEM_COMPOUND_CID"),
+            Some(&"5460033".to_string())
+        );
     }
 
     #[test]
@@ -646,7 +661,7 @@ $$$$
         let reader = Cursor::new(sdf_content);
         let result = parse_sdf_file(reader);
         assert!(result.is_ok());
-        
+
         let entries = result.unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -654,7 +669,10 @@ $$$$
         assert_eq!(entry.mol_file.atoms.len(), 1);
         assert_eq!(entry.mol_file.bonds.len(), 0);
         assert_eq!(entry.data_fields.len(), 1);
-        assert_eq!(entry.data_fields.get("PUBCHEM_COMPOUND_CID"), Some(&"1".to_string()));
+        assert_eq!(
+            entry.data_fields.get("PUBCHEM_COMPOUND_CID"),
+            Some(&"1".to_string())
+        );
     }
 
     #[test]
@@ -672,7 +690,7 @@ $$$$
         let reader = Cursor::new(sdf_content);
         let result = parse_sdf_file(reader);
         assert!(result.is_ok());
-        
+
         let entries = result.unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -698,7 +716,7 @@ M  END
         let reader = Cursor::new(sdf_content);
         let result = parse_sdf_file(reader);
         assert!(result.is_ok());
-        
+
         let entries = result.unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -706,7 +724,10 @@ M  END
         assert_eq!(entry.mol_file.atoms.len(), 1);
         assert_eq!(entry.mol_file.bonds.len(), 0);
         assert_eq!(entry.data_fields.len(), 1);
-        assert_eq!(entry.data_fields.get("PUBCHEM_COMPOUND_CID"), Some(&"1".to_string()));
+        assert_eq!(
+            entry.data_fields.get("PUBCHEM_COMPOUND_CID"),
+            Some(&"1".to_string())
+        );
     }
 
     #[test]
@@ -717,5 +738,4 @@ M  END
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
     }
-
 }

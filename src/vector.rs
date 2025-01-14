@@ -1,7 +1,7 @@
 use rand::Rng;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, Neg};
 use std::fmt;
 use std::fmt::Display;
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub};
 
 /// A 3D vector represented by its x, y, and z components.
 ///
@@ -105,7 +105,6 @@ impl MulAssign<f64> for Vector {
         self.y = self.y * scalar;
         self.z = self.z * scalar;
     }
-
 }
 
 impl IntoIterator for Vector {
@@ -159,7 +158,7 @@ impl<'a> Mul<f64> for &'a Vector {
 }
 
 impl<'a> Div<f64> for &'a Vector {
-    type Output=Vector;
+    type Output = Vector;
 
     fn div(self, scalar: f64) -> Vector {
         Vector {
@@ -233,7 +232,7 @@ impl Vector {
     }
     pub fn x(&self) -> f64 {
         self.x
-    } 
+    }
     pub fn y(&self) -> f64 {
         self.y
     }
@@ -302,7 +301,7 @@ impl Vector {
     pub fn magnitude(&self) -> f64 {
         self.length()
     }
-    
+
     /// Calculates the squared length of the vector.
     ///
     /// This is more efficient than `length()` when you only need to compare lengths,
@@ -321,7 +320,7 @@ impl Vector {
     /// assert_eq!(v.squared_length(), 9.0);
     /// ```
     pub fn squared_length(&self) -> f64 {
-       self.dot(self) 
+        self.dot(self)
     }
 
     /// Determines if two vectors are parallel within a given tolerance.
@@ -351,7 +350,6 @@ impl Vector {
         let cross_product = self.cross(other);
         cross_product.length() < tolerance * self.length() * other.length()
     }
-
 
     /// Calculates the dot product of two vectors.
     ///
@@ -442,9 +440,9 @@ impl Vector {
     /// ```
     /// use molecules::vector::Vector;
     ///
-    /// let vec1 = Vector::x();
-    /// let vec2 = Vector::y();
-    /// assert_eq!(vec1.cross(&vec2),Vector::z())
+    /// let vec1 = Vector::unit_x();
+    /// let vec2 = Vector::unit_y();
+    /// assert_eq!(vec1.cross(&vec2),Vector::unit_z())
     /// ```
     pub fn cross(&self, other: &Self) -> Self {
         Self {
@@ -573,7 +571,7 @@ impl Vector {
     pub fn is_opposite(&self, other: &Vector, tolerance: f64) -> bool {
         let dot_product = self.dot(other);
         let magnitudes_product = self.length() * other.length();
-        
+
         if magnitudes_product == 0.0 {
             false // At least one vector is zero, so they can't be opposite
         } else {
@@ -615,7 +613,7 @@ impl Vector {
     /// * `angle` - The angle to rotate by in radians.
     ///
     /// # Returns
-    /// 
+    ///
     /// * `Vector` - The rotated vector.
     ///
     /// # Examples
@@ -633,21 +631,33 @@ impl Vector {
         let cos_theta = angle.cos();
         let sin_theta = angle.sin();
         let rotation_matrix = [
-            [cos_theta + axis.x * axis.x * (1.0 - cos_theta),
-             axis.x * axis.y * (1.0 - cos_theta) - axis.z * sin_theta,
-             axis.x * axis.z * (1.0 - cos_theta) + axis.y * sin_theta],
-            [axis.x * axis.y * (1.0 - cos_theta) + axis.z * sin_theta,
-             cos_theta + axis.y * axis.y * (1.0 - cos_theta),
-             axis.y * axis.z * (1.0 - cos_theta) - axis.x * sin_theta],
-            [axis.x * axis.z * (1.0 - cos_theta) - axis.y * sin_theta,
-             axis.y * axis.z * (1.0 - cos_theta) + axis.x * sin_theta,
-             cos_theta + axis.z * axis.z * (1.0 - cos_theta)]
+            [
+                cos_theta + axis.x * axis.x * (1.0 - cos_theta),
+                axis.x * axis.y * (1.0 - cos_theta) - axis.z * sin_theta,
+                axis.x * axis.z * (1.0 - cos_theta) + axis.y * sin_theta,
+            ],
+            [
+                axis.x * axis.y * (1.0 - cos_theta) + axis.z * sin_theta,
+                cos_theta + axis.y * axis.y * (1.0 - cos_theta),
+                axis.y * axis.z * (1.0 - cos_theta) - axis.x * sin_theta,
+            ],
+            [
+                axis.x * axis.z * (1.0 - cos_theta) - axis.y * sin_theta,
+                axis.y * axis.z * (1.0 - cos_theta) + axis.x * sin_theta,
+                cos_theta + axis.z * axis.z * (1.0 - cos_theta),
+            ],
         ];
 
         let rotated_vector = Vector {
-            x: self.x * rotation_matrix[0][0] + self.y * rotation_matrix[0][1] + self.z * rotation_matrix[0][2],
-            y: self.x * rotation_matrix[1][0] + self.y * rotation_matrix[1][1] + self.z * rotation_matrix[1][2],
-            z: self.x * rotation_matrix[2][0] + self.y * rotation_matrix[2][1] + self.z * rotation_matrix[2][2],
+            x: self.x * rotation_matrix[0][0]
+                + self.y * rotation_matrix[0][1]
+                + self.z * rotation_matrix[0][2],
+            y: self.x * rotation_matrix[1][0]
+                + self.y * rotation_matrix[1][1]
+                + self.z * rotation_matrix[1][2],
+            z: self.x * rotation_matrix[2][0]
+                + self.y * rotation_matrix[2][1]
+                + self.z * rotation_matrix[2][2],
         };
 
         rotated_vector
@@ -665,9 +675,18 @@ impl Vector {
         self.rotate_around_axis(&Vector::unit_z(), angle)
     }
 
-    pub fn rotate_around(&self, center: Vector, x_angle: f64, y_angle: f64, z_angle: f64) -> Vector {
+    pub fn rotate_around(
+        &self,
+        center: Vector,
+        x_angle: f64,
+        y_angle: f64,
+        z_angle: f64,
+    ) -> Vector {
         let translated = *self - center;
-        let rotated = translated.rotate_around_x(x_angle).rotate_around_y(y_angle).rotate_around_z(z_angle);
+        let rotated = translated
+            .rotate_around_x(x_angle)
+            .rotate_around_y(y_angle)
+            .rotate_around_z(z_angle);
         rotated + center
     }
 
@@ -749,8 +768,6 @@ impl Vector {
     }
 }
 
-
-
 // Implement the Neg trait for Vector
 impl Neg for Vector {
     type Output = Vector;
@@ -793,7 +810,12 @@ mod tests {
     const EPSILON: f64 = 1e-10;
 
     fn assert_vector_eq(v1: &Vector, v2: &Vector) {
-        assert!((*v1 - *v2).length() < EPSILON, "Vectors are not equal within epsilon: {:?} != {:?}", v1, v2);
+        assert!(
+            (*v1 - *v2).length() < EPSILON,
+            "Vectors are not equal within epsilon: {:?} != {:?}",
+            v1,
+            v2
+        );
     }
 
     #[test]

@@ -11,11 +11,19 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chemistry_consts = "0.1.4"
+chemistry_consts = {path = "../chemistry_consts"}
 itertools = "0.12.1"
 kiddo = "4.2.1"
+ndarray = "0.16.1"
 nohash-hasher = "0.2.0"
 petgraph = "0.6.5"
 rand = "0.8.5"
 rayon = "1.10.0"
 tinyvec = "1.8.0"
+walkdir = "2.5.0"
+canonizer = { path = "../canonizer" }
+bitvec = "1.0.1"
+bit-set = "0.8.0"
+
+[profile.test]
+inherits = "release"

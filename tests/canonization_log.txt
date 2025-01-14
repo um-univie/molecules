@@ -1,0 +1,9 @@
+
+=== Final Statistics ===
+Total SMILES processed: 80605
+Correct SMILES: 80605
+Success rate: 100.00%
+=== Final Statistics ===
+Total SMILES processed: 80605
+Correct SMILES: 80605
+Success rate: 100.00%

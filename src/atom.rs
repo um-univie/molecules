@@ -1,7 +1,8 @@
 use crate::{
-vector::Vector,
-bond::{BondTarget,BondOrder},
-chirality::ChiralClass};
+    chirality::ChiralClass,
+    molecule::bond::{BondOrder, BondTarget},
+    vector::Vector,
+};
 use chemistry_consts::ElementProperties;
 use tinyvec::ArrayVec;
 
@@ -10,11 +11,12 @@ pub struct Atom {
     pub atomic_number: u8,
     pub charge: i8,
     pub is_radical: bool,
+    pub aromatic: bool,
     pub isotope: Option<u16>,
     pub chiral_class: ChiralClass,
     pub atom_class: Option<u8>,
     pub position_vector: Option<Vector>,
-    pub bonds: ArrayVec<[BondTarget;10]>,
+    pub bonds: ArrayVec<[BondTarget; 10]>,
 }
 
 impl Atom {
@@ -83,7 +85,11 @@ impl Atom {
         });
         Ok(Atom {
             position_vector,
-            atomic_number: parts[3].to_uppercase().as_str().atomic_number().ok_or("Could not find atomic number")?,
+            atomic_number: parts[3]
+                .to_uppercase()
+                .as_str()
+                .atomic_number()
+                .ok_or("Could not find atomic number")?,
             ..Default::default()
         })
     }
@@ -105,7 +111,7 @@ impl Atom {
         self.electronegativity().cmp(&other.electronegativity())
     }
 
-    pub fn bonds(&self) -> &ArrayVec<[BondTarget;10]> {
+    pub fn bonds(&self) -> &ArrayVec<[BondTarget; 10]> {
         &self.bonds
     }
 
@@ -172,13 +178,9 @@ impl Atom {
     /// assert_eq!(atom1.distance(&atom2),1.0);
     /// ```
     pub fn distance(&self, other: &Atom) -> f64 {
-        let Some(self_position_vector) = self.position_vector else {
-            return 0.0;
-        };
-        let Some(other_position_vector) = other.position_vector else {
-            return 0.0;
-        };
-        self_position_vector.distance(&other_position_vector)
+        self.position_vector
+            .zip(other.position_vector)
+            .map_or(0.0, |(v1, v2)| v1.distance(&v2))
     }
 
     /// Calculates the squared distance between two atoms saving computation time.
